@@ -1,6 +1,6 @@
 """Specification for the NAYO MCHS thermo-shaker module (T002001 on GW_001)."""
 
-from ..base import ACT, Action, Position, Prop, READ
+from ..base import ACT, Action, Prop, READ
 
 NAME = "shaker"
 LABEL = "恒温振荡模组"
@@ -40,16 +40,6 @@ PROPS = {
     "TargetTemperature": Prop("目标温度", unit="℃"),
     "TempControllerStateText": Prop("温控"),
     "ErrorCode": Prop("错误码", values={0: "无"}),
-}
-
-POSITIONS = {
-    "shaker": Position(
-        label="恒温振荡模组",
-        device="shaker",
-        point="2120763995201499138",
-        posture=0,
-        index="1-1",
-    ),
 }
 
 

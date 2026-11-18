@@ -63,7 +63,14 @@ def test_island_registry_and_skill_decorator() -> None:
     assert NAME_TO_CODE["rack"] == "T006001"
     assert rack.spec.STATE_PROPS == ["rackState", "errorCode"]
     assert KEY_PROPS["rack"] == ["rackState", "errorCode"]
-    assert set(POSITIONS) == {"pcr", "shaker", "turntable", "rack:low", "rack:high"}
+    assert set(POSITIONS) == {
+        "rack:1-2",
+        "rack:1-3",
+        "pcr",
+        "shaker",
+        "turntable",
+        "arm:home",
+    }
 
     @skill(kind=ACT, label="测试 {x}")
     def sample_skill(lab, x: int):

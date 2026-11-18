@@ -6,7 +6,7 @@ import sqlite3
 import time
 from typing import Any
 
-from .devices import POSITIONS
+from .devices import LABWARE_POSITIONS
 from .errors import Blocked
 from .store import records
 
@@ -43,7 +43,7 @@ class Materials:
 
     def place(self, labware_id: str, type: str, position: str) -> None:
         """Register a plate placed on the island by a human; raises Blocked on conflict."""
-        if position not in POSITIONS:
+        if position not in LABWARE_POSITIONS:
             raise Blocked(f"unknown position: {position}")
         existing = records.get_labware(self._conn, labware_id)
         if existing is not None and existing["position"] is not None:
@@ -88,7 +88,7 @@ class Materials:
         if existing is None:
             raise Blocked(f"unknown labware: {labware_id}")
         if position is not None:
-            if position not in POSITIONS:
+            if position not in LABWARE_POSITIONS:
                 raise Blocked(f"unknown position: {position}")
             occupant = records.get_labware_at(self._conn, position)
             if occupant is not None and occupant["id"] != labware_id:
@@ -114,7 +114,7 @@ class Materials:
         operation_id: str | None = None,
     ) -> None:
         """Update `labware_id` after a successful robot arm transfer; raises Blocked on conflict."""
-        if to_position not in POSITIONS:
+        if to_position not in LABWARE_POSITIONS:
             raise Blocked(f"unknown position: {to_position}")
         existing = records.get_labware(self._conn, labware_id)
         if existing is None or existing["position"] is None:

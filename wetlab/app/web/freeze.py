@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from wetlab.lab.devices import POSITIONS
+from wetlab.lab.devices import LABWARE_POSITIONS
 
 from . import actions, labels, ui
 from .db import open_web_db
@@ -40,7 +40,7 @@ def resolve_panel() -> None:
             if lw_id is not None:
                 position = st.selectbox(
                     f"冻结时机械臂正在搬运 {lw_id}。这块板现在实际在哪里？",
-                    [*POSITIONS, "removed"],
+                    [*LABWARE_POSITIONS, "removed"],
                     format_func=_pos_label,
                     index=None,
                     placeholder="请到现场确认后选择",

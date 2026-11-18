@@ -12,7 +12,7 @@ from typing import Any, NotRequired
 from langchain.agents import AgentState
 
 from ..lab import registry
-from ..lab.devices import ISLAND
+from ..lab.devices import ISLAND, LABWARE_POSITIONS
 from ..lab.snapshot import read_snapshot
 from ..lab.store import inbox, open_db
 
@@ -47,7 +47,11 @@ def render_system_prompt(
 
     island_lines: list[str] = []
     for dev in ISLAND:
-        pos_items = [f"`{name}`（{pos.label}）" for name, pos in dev.spec.POSITIONS.items()]
+        pos_items = [
+            f"`{name}`（{pos.label}）"
+            for name, pos in LABWARE_POSITIONS.items()
+            if pos.device == dev.spec.NAME
+        ]
         positions = ", ".join(pos_items) or "无放板位置"
         key_props = ", ".join(f"`{p}`" for p in dev.spec.KEY_PROPS)
         island_lines.append(

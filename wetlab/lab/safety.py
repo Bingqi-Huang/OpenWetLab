@@ -132,7 +132,12 @@ def check(device: str, action: str, params: dict | None, state: dict) -> tuple[b
                 continue
             target_dev = POSITION_DEVICE[pos_name]
             target_name = target_dev.spec.NAME
-            if target_dev.rules is not None:
+            ready_fn = (
+                getattr(target_dev.rules, "ready_for_arm", None)
+                if target_dev.rules is not None
+                else None
+            )
+            if ready_fn is not None:
                 label = POSITIONS[pos_name].label
                 target_telem_err = _telemetry_error(target_name, state)
                 if target_telem_err:
@@ -140,7 +145,7 @@ def check(device: str, action: str, params: dict | None, state: dict) -> tuple[b
                 target_fault = device_fault(target_name, state)
                 if target_fault:
                     return False, f"hand-off at {label}: {target_fault}"
-                handoff_err = target_dev.rules.ready_for_arm(state)
+                handoff_err = ready_fn(state)
                 if handoff_err:
                     return False, f"hand-off at {label}: {handoff_err}"
 

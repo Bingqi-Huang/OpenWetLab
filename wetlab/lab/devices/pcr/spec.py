@@ -1,6 +1,6 @@
 """Specification for the Arhat-auto 96 thermal cycler (PCR002 on GW_001)."""
 
-from ..base import ACT, Action, Position, Prop, READ
+from ..base import ACT, Action, Prop, READ
 
 NAME = "pcr"
 LABEL = "PCR仪"
@@ -44,16 +44,6 @@ PROPS = {
     "HeaterLidEnabled": Prop("热盖加热", values={True: "开", False: "关"}),
     "LidTemperature": Prop("热盖温度", unit="℃"),
     "FaultText": Prop("故障"),
-}
-
-POSITIONS = {
-    "pcr": Position(
-        label="PCR仪",
-        device="pcr",
-        point="2118260185060499457",
-        posture=90,
-        index="1-1",
-    ),
 }
 
 

@@ -1,6 +1,6 @@
 """Specification for the LK-TECH steering turntable (STEERING_PLATFORM001 on GW_001)."""
 
-from ..base import ACT, Action, Position, Prop
+from ..base import ACT, Action, Prop
 
 NAME = "turntable"
 LABEL = "转向台"
@@ -16,17 +16,6 @@ KEY_PROPS = ["States", "Angles"]
 PROPS = {
     "Angles": Prop("角度", unit="°"),
     "States": Prop("电机", values={"Enabled": "已使能"}),
-}
-
-POSITIONS = {
-    "turntable": Position(
-        label="转向台",
-        device="turntable",
-        point="2118251893923930114",
-        posture=0,
-        index="1-1",
-        holds_labware=False,
-    ),
 }
 
 
