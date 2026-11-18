@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from ..backend import Backend
 from ..store import inbox, island, runs
-from . import mission_commands, protocol_commands, runtime_commands, schemas, stop
+from . import messages, mission_commands, protocol_commands, runtime_commands, schemas, stop
 from .schemas import (
     AbortPayload,
     AgentErrorPayload,
@@ -100,6 +100,16 @@ def _resolve_command_context(
     return mid, eid
 
 
+def _finalize_outcome(outcome: dict[str, Any], cmd: dict[str, Any]) -> dict[str, Any]:
+    if outcome.get("ok") is not False:
+        return outcome
+    raw_val = outcome.get("error_raw")
+    err_val = outcome.get("error")
+    error_raw = str(raw_val if raw_val is not None else (err_val or ""))
+    error = messages.translate_text_error(str(err_val or error_raw), cmd)
+    return {**outcome, "ok": False, "error": error, "error_raw": error_raw}
+
+
 def _record_failed_command(
     conn: sqlite3.Connection,
     cmd: dict[str, Any],
@@ -108,8 +118,9 @@ def _record_failed_command(
     *,
     outer_tx: bool,
 ) -> dict[str, Any]:
-    err_msg = str(exc)
-    outcome = {"ok": False, "error": err_msg}
+    error_raw = str(exc)
+    error = messages.format_command_error(exc, cmd)
+    outcome = {"ok": False, "error": error, "error_raw": error_raw}
     outcome_json = json.dumps(outcome, ensure_ascii=False)
     cmd_id = int(cmd["id"])
     who = str(cmd["who"])
@@ -125,7 +136,8 @@ def _record_failed_command(
                 "who": who,
                 "command_id": cmd_id,
                 "kind": cmd["kind"],
-                "error": err_msg,
+                "error": error,
+                "error_raw": error_raw,
                 "mission_id": mid,
                 "experiment_id": eid,
             }
@@ -164,7 +176,7 @@ def process_command(
             schemas.validate_command_payload(kind, cmd["payload"])
         except Exception as exc:
             return _record_failed_command(conn, cmd, now, exc, outer_tx=outer_tx)
-        outcome = stop.stop_all(backend, conn)
+        outcome = _finalize_outcome(stop.stop_all(backend, conn), cmd)
         handled_at = backend.now()
         out_json = json.dumps(outcome, ensure_ascii=False)
         if outer_tx:
@@ -180,7 +192,8 @@ def process_command(
         if kind in ("submit_protocol", "approve"):
             island.set_closed_skills(conn, backend.closed_skills)
         model = schemas.validate_command_payload(kind, cmd["payload"])
-        outcome = _dispatch_validated(conn, cmd, model, now, runs_dir, on_labware_change)
+        raw_outcome = _dispatch_validated(conn, cmd, model, now, runs_dir, on_labware_change)
+        outcome = _finalize_outcome(raw_outcome, cmd)
         out_json = json.dumps(outcome, ensure_ascii=False)
         inbox.mark_command_handled(conn, cmd_id, handled_at=now, outcome=out_json)
         conn.execute("RELEASE SAVEPOINT cmd_sp")
