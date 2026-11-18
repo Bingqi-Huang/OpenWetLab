@@ -163,3 +163,61 @@ def test_sqlite_integrity_errors_translated_with_command_context() -> None:
         assert "mode" in msg_chk and "不合法" in msg_chk
     finally:
         conn.close()
+
+
+def test_domain_and_materials_errors_translated_and_chinese_preserved() -> None:
+    """`CommandError` and `Blocked` English strings become clear Chinese; Chinese stays intact."""
+    from wetlab.lab.errors import Blocked
+    from wetlab.lab.service.schemas import CommandError
+
+    domain_cases = [
+        (CommandError("unknown command kind: teleport"), None, ["不支持", "teleport"]),
+        (CommandError("command payload must be a JSON object"), None, ["payload", "一张表"]),
+        (CommandError("unknown mission: M-999"), None, ["任务", "M-999", "不存在"]),
+        (CommandError("unknown experiment: E-999"), None, ["实验", "E-999", "不存在"]),
+        (
+            CommandError("experiment E-001 is already completed"),
+            None,
+            ["E-001", "已完成", "不能"],
+        ),
+        (
+            CommandError("protocol is not in submitted status"),
+            {"payload": {"protocol_id": "E-001-v1"}},
+            ["E-001-v1", "待审阅", "批准"],
+        ),
+        (CommandError("fingerprint mismatch"), None, ["fingerprint", "不一致"]),
+        (CommandError("another protocol is already active"), None, ["正在执行", "暂停"]),
+        (
+            CommandError("reject requires a submitted protocol"),
+            {"payload": {"protocol_id": "E-001-v1"}},
+            ["E-001-v1", "待审阅", "退回"],
+        ),
+        (CommandError("no running protocol to pause"), None, ["没有正在运行的方案", "暂停"]),
+        (CommandError("resume is only allowed for a paused protocol"), None, ["已暂停", "继续"]),
+        (CommandError("island is not frozen"), None, ["冻结", "无需"]),
+        (
+            CommandError("unfreeze on a transfer step requires labware_position"),
+            None,
+            ["搬运", "labware_position"],
+        ),
+        (CommandError("cannot resolve experiment to abort"), None, ["实验", "终止"]),
+        (Blocked("unknown position: turntable"), None, ["turntable", "不能放置器皿"]),
+        (Blocked("unknown position: mars"), None, ["未知", "mars"]),
+        (
+            Blocked("labware LW-1 is already on the island at pcr"),
+            None,
+            ["LW-1", "pcr", "不能重复"],
+        ),
+        (Blocked("position pcr is already occupied by LW-1"), None, ["pcr", "LW-1", "占用"]),
+        (Blocked("labware LW-9 is not on the island"), None, ["LW-9", "不在"]),
+        (Blocked("unknown labware: LW-9"), None, ["LW-9", "未"]),
+    ]
+    for exc, cmd_ctx, expected_tokens in domain_cases:
+        out = messages.format_command_error(exc, cmd_ctx)
+        for tok in expected_tokens:
+            assert tok in out, f"expected {tok!r} in {out!r} for {exc!r}"
+        assert "命令未能执行：" not in out
+
+    kept = messages.format_command_error(CommandError("示教点位已更新，请重新预演并批准"), None)
+    assert kept == "示教点位已更新，请重新预演并批准"
+
