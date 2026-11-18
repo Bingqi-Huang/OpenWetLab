@@ -1,11 +1,19 @@
-"""Transfer skill for the Huayan 6-axis robot arm (docs/spec/04 section 5.8)."""
+"""Transfer skill for the Huayan 6-axis robot arm (docs/spec/04 section 5.8 & 5.16)."""
 
 from typing import Annotated, Any
 
 from pydantic import Field
 
 from ...errors import Blocked
-from ..base import ACT, skill
+from ..base import ACT, Position, skill
+
+
+def _material_index(src: Position, dst: Position) -> str:
+    if src.device == "rack":
+        return src.index
+    if dst.device == "rack":
+        return dst.index
+    return "1-1"
 
 
 @skill(kind=ACT, label="将 {labware_id} 搬运到 {to_position}")
@@ -20,21 +28,23 @@ def transfer(
         raise Blocked(f"labware {labware_id} is not on the island")
     if to_position not in lab.positions:
         raise Blocked(f"unknown position: {to_position}")
+    src = lab.positions[from_pos]
+    dst = lab.positions[to_position]
+    if not dst.holds_labware:
+        raise Blocked(f"position {to_position} does not hold labware")
     if to_position == from_pos:
         raise Blocked(f"labware {labware_id} is already at {to_position}")
     occupant = lab.materials.at(to_position)
     if occupant is not None:
         raise Blocked(f"position {to_position} is already occupied by {occupant}")
 
-    src = lab.positions[from_pos]
-    dst = lab.positions[to_position]
     payload = {
         "Tasks": [
             {"PauseTime": 0, "PositionId": int(src.point), "ClawSwitch": 0},
             {"PauseTime": 0, "PositionId": int(dst.point), "ClawSwitch": 1},
         ],
         "Material": {
-            "Index": "1-1",
+            "Index": _material_index(src, dst),
             "Angle": 0.0,
             "Speed": "低速",
             "GrabHeight": 0.0,
