@@ -16,15 +16,9 @@ from .test_client import FakePahoClient
 
 CAPTURES = Path(__file__).resolve().parents[3] / "captures"
 
-EXPECTED_CLOSED_SKILLS = {
-    "pcr_start_program",
-    "pcr_confirm_finished",
-    "pcr_stop",
-    "shake_start",
-    "shake_stop",
-    "transfer",
-    "rotate_turntable",
-}
+# 2026-11-18 user decision: the six skills whose low-level actions were exercised on the real
+# island that day are open; the turntable is only used by the gateway's motion plugin.
+EXPECTED_CLOSED_SKILLS = {"rotate_turntable"}
 
 
 def _capture_lines(filename: str) -> list[dict]:
@@ -60,8 +54,8 @@ def test_closed_skills_exact_set_and_registry_not_available(tmp_path: Path) -> N
     b1 = MqttBackend(raw_dir=tmp_path / "raw1", env_file=tmp_path / "none.env")
     b2 = MqttBackend(raw_dir=tmp_path / "raw2", env_file=tmp_path / "none.env")
     assert b1._now is time.time and b1._sleep is time.sleep
-    b1.closed_skills.remove("pcr_start_program")
-    assert "pcr_start_program" in b2.closed_skills
+    b1.closed_skills.remove("rotate_turntable")
+    assert "rotate_turntable" in b2.closed_skills
 
     fake_paho = FakePahoClient()
     client = MqttClient(

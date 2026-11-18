@@ -11,17 +11,9 @@ from .codec import ParsedFrame, RpcResult
 from .commands import CommandDispatcher
 from .telemetry import TelemetryTracker
 
-DEFAULT_CLOSED_SKILLS: frozenset[str] = frozenset(
-    {
-        "pcr_start_program",
-        "pcr_confirm_finished",
-        "pcr_stop",
-        "shake_start",
-        "shake_stop",
-        "transfer",
-        "rotate_turntable",
-    }
-)
+# Opened by the user on 2026-11-18 after that day's on-site tests (04 section 0.3). The turntable
+# stays closed: the gateway's motion plugin uses it during transfers; we never rotate it ourselves.
+DEFAULT_CLOSED_SKILLS: frozenset[str] = frozenset({"rotate_turntable"})
 
 
 class MqttBackend:
