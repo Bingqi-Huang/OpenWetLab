@@ -1,9 +1,18 @@
-"""Tests for Scenario.from_snapshot / from_snapshot (04 section 5.10)."""
+"""Tests for Scenario.from_snapshot / from_snapshot and calibrated SOP rehearsal (#33)."""
 
+import json
+from pathlib import Path
+
+import pytest
+
+from wetlab.lab.materials import Materials
+from wetlab.lab.protocol import rehearse
 from wetlab.lab.sim import DEFAULT_EPOCH, Scenario, SimBackend
 from wetlab.lab.sim.scenario import from_snapshot
 from wetlab.lab.snapshot import read_snapshot
 from wetlab.lab.store import island, open_db, records
+
+SOPS_DIR = Path(__file__).resolve().parents[3] / "sops"
 
 
 def test_from_empty_snapshot_uses_default_epoch_and_clean_defaults() -> None:
@@ -82,3 +91,23 @@ def test_from_snapshot_accepts_dict_labware_entries() -> None:
     scen = from_snapshot(snap)
     assert scen.start_time == 2500.0
     assert scen.labware == {"LW-003": "rack:1-2"}
+
+
+def test_task_thermal_workflow_calibrated_rehearsal_totals_and_wait_margins() -> None:
+    conn = open_db(":memory:")
+    try:
+        Materials(conn, now=lambda: 100.0).place("LW-001", "pcr_plate_96", "pcr")
+        proto = json.loads((SOPS_DIR / "task_thermal_workflow.json").read_text("utf-8"))
+        res = rehearse(conn, proto)
+        assert res["ok"] is True
+        assert res["accidents"] == []
+        assert res["total_s"] == pytest.approx(4438.0)
+
+        wait_steps = [s for s in res["steps"] if "wait_until" in s["step"]]
+        assert len(wait_steps) == 4
+        for step_out in wait_steps:
+            max_s = step_out["step"]["wait_until"]["max_seconds"]
+            assert step_out["elapsed_s"] < max_s
+            assert (max_s - step_out["elapsed_s"]) >= 500.0
+    finally:
+        conn.close()
