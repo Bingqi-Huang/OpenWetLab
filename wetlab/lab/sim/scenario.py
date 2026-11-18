@@ -17,6 +17,7 @@ class Scenario(BaseModel):
     labware: dict[str, str] = Field(default_factory=dict)
     devices: dict[str, dict] = Field(default_factory=dict)
     faults: list[Fault] = Field(default_factory=list)
+    gateway_devices: list[dict[str, Any]] | None = None
 
     @field_validator("labware")
     @classmethod
@@ -51,7 +52,12 @@ def from_snapshot(snapshot: dict[str, Any]) -> Scenario:
     """Construct a Scenario from a `snapshot.read_snapshot(conn)` dictionary."""
     last_ts = float(snapshot.get("last_timestamp") or 0.0)
     start_time = last_ts if last_ts > 0.0 else DEFAULT_EPOCH
-    labware = dict(snapshot.get("labware") or {})
+    raw_labware = snapshot.get("labware") or {}
+    labware: dict[str, str] = {}
+    for lw_id, entry in raw_labware.items():
+        pos = entry["position"] if isinstance(entry, dict) else entry
+        if pos is not None:
+            labware[lw_id] = str(pos)
 
     devices: dict[str, dict[str, Any]] = {}
     raw_devices = snapshot.get("devices") or {}

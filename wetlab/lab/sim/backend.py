@@ -1,5 +1,6 @@
 """SimPy-backed virtual Backend implementation."""
 
+import copy
 import importlib
 import time
 from typing import Any
@@ -10,6 +11,26 @@ from ..errors import DeviceFailed, NoResult
 from .faults import FaultInjector
 from .scenario import Scenario
 from .world import SimWorld
+
+
+def _default_gateway_devices() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for idx, dev in enumerate(ISLAND, start=1):
+        items.append(
+            {
+                "Id": idx,
+                "Name": dev.spec.LABEL,
+                "DriverId": idx,
+                "DriverName": f"{dev.spec.LABEL}驱动",
+                "DriverTags": [],
+                "Status": "online",
+                "IsSimulation": True,
+                "IsEnabled": True,
+                "Configs": [{"Key": "Code", "Value": dev.spec.CODE}],
+                "CreatedAt": "2026-11-18T00:00:00",
+            }
+        )
+    return items
 
 
 class SimBackend:
@@ -32,6 +53,10 @@ class SimBackend:
         self.gateway_online: bool = True
         self.world = SimWorld(start_time=scen.start_time, plates=scen.labware)
         self._faults = FaultInjector(scen.faults)
+        if scen.gateway_devices is None:
+            self._gateway_devices = _default_gateway_devices()
+        else:
+            self._gateway_devices = copy.deepcopy(scen.gateway_devices)
         self._by_code: dict[str, SimDevice] = {}
 
         for dev in ISLAND:
@@ -76,11 +101,14 @@ class SimBackend:
             raise NoResult(f"{device_code}.{action}: no result within {timeout_s}s")
 
         try:
-            if fault is not None:
+            if fault is not None and fault.kind == "fail":
                 self.sleep(1.0)
                 raise DeviceFailed(fault.message)
             method = getattr(sim_dev, action, None)
-            if method is not None:
+            if action == "GetDevices":
+                sim_dev.refresh()
+                result = {"deviceData": copy.deepcopy(self._gateway_devices)}
+            elif method is not None:
                 proc = self.world.env.process(method(call_params))
                 result = self.world.env.run(until=proc)
             else:
@@ -90,6 +118,8 @@ class SimBackend:
                     result = dict(sim_dev.props)
                 else:
                     raise DeviceFailed(f"未知功能: {action}")
+            if fault is not None and fault.kind == "failed_after_act":
+                raise DeviceFailed(fault.message)
         except DeviceFailed:
             sim_dev.props["WorkingStatus"] = 2
             raise

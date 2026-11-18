@@ -63,3 +63,22 @@ def test_from_snapshot_restores_clock_labware_and_resumes_running_pcr() -> None:
         assert sim.state()["PCR002"]["PcrState"] == "Idle"
     finally:
         conn.close()
+
+
+def test_from_snapshot_accepts_dict_labware_entries() -> None:
+    snap = {
+        "devices": {},
+        "gateway": {"online": True, "busy_by_others": False},
+        "labware": {
+            "LW-003": {
+                "position": "rack:1-2",
+                "type": "96孔PCR板",
+                "contents": [{"name": "X", "wells": None, "volume_ul": 50.0, "note": None}],
+            }
+        },
+        "freeze": {"frozen": False, "reason": None, "operation_id": None, "at": None},
+        "last_timestamp": 2500.0,
+    }
+    scen = from_snapshot(snap)
+    assert scen.start_time == 2500.0
+    assert scen.labware == {"LW-003": "rack:1-2"}
