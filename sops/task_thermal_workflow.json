@@ -1,0 +1,169 @@
+{
+  "name": "单样本 SynCom seq 文库制备（温度部分）",
+  "labware": {
+    "LW-001": "pcr"
+  },
+  "steps": [
+    {
+      "skill": "pcr_close",
+      "args": {}
+    },
+    {
+      "skill": "pcr_start_program",
+      "args": {
+        "stages": [
+          {
+            "temperature_c": 37,
+            "hold_seconds": 900
+          }
+        ],
+        "volume_ul": 50,
+        "lid_c": 105
+      }
+    },
+    {
+      "wait_until": {
+        "device": "pcr",
+        "state": {
+          "PcrState": "Idle"
+        },
+        "max_seconds": 1800
+      }
+    },
+    {
+      "skill": "pcr_confirm_finished",
+      "args": {}
+    },
+    {
+      "skill": "pcr_open",
+      "args": {}
+    },
+    {
+      "skill": "pcr_close",
+      "args": {}
+    },
+    {
+      "skill": "pcr_start_program",
+      "args": {
+        "stages": [
+          {
+            "temperature_c": 53,
+            "hold_seconds": 900
+          }
+        ],
+        "volume_ul": 50,
+        "lid_c": 105
+      }
+    },
+    {
+      "wait_until": {
+        "device": "pcr",
+        "state": {
+          "PcrState": "Idle"
+        },
+        "max_seconds": 1800
+      }
+    },
+    {
+      "skill": "pcr_confirm_finished",
+      "args": {}
+    },
+    {
+      "skill": "pcr_open",
+      "args": {}
+    },
+    {
+      "skill": "pcr_close",
+      "args": {}
+    },
+    {
+      "skill": "pcr_start_program",
+      "args": {
+        "stages": [
+          {
+            "temperature_c": 90,
+            "hold_seconds": 600
+          }
+        ],
+        "volume_ul": 50,
+        "lid_c": 105
+      }
+    },
+    {
+      "wait_until": {
+        "device": "pcr",
+        "state": {
+          "PcrState": "Idle"
+        },
+        "max_seconds": 1200
+      }
+    },
+    {
+      "skill": "pcr_confirm_finished",
+      "args": {}
+    },
+    {
+      "skill": "pcr_open",
+      "args": {}
+    },
+    {
+      "skill": "pcr_close",
+      "args": {}
+    },
+    {
+      "skill": "pcr_start_program",
+      "args": {
+        "stages": [
+          {
+            "temperature_c": 98,
+            "hold_seconds": 60
+          },
+          {
+            "repeat": 23,
+            "steps": [
+              {
+                "temperature_c": 98,
+                "hold_seconds": 10
+              },
+              {
+                "temperature_c": 60,
+                "hold_seconds": 5
+              },
+              {
+                "temperature_c": 72,
+                "hold_seconds": 5
+              }
+            ]
+          },
+          {
+            "temperature_c": 72,
+            "hold_seconds": 60
+          },
+          {
+            "temperature_c": 4,
+            "hold_seconds": 300
+          }
+        ],
+        "volume_ul": 25,
+        "lid_c": 105
+      }
+    },
+    {
+      "wait_until": {
+        "device": "pcr",
+        "state": {
+          "PcrState": "Idle"
+        },
+        "max_seconds": 3600
+      }
+    },
+    {
+      "skill": "pcr_confirm_finished",
+      "args": {}
+    },
+    {
+      "skill": "pcr_open",
+      "args": {}
+    }
+  ]
+}

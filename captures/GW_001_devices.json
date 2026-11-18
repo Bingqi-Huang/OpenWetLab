@@ -1,0 +1,499 @@
+[
+ {
+  "Id": 36,
+  "Name": "转向台",
+  "DriverId": 39,
+  "DriverName": "LK-TECH 瓴控转向台驱动",
+  "DriverTags": [
+   "LKTech",
+   "转向台",
+   "转板器",
+   "转台",
+   "Steering",
+   "瓴控"
+  ],
+  "Status": "offline",
+  "IsSimulation": false,
+  "IsEnabled": true,
+  "Configs": [
+   {
+    "Key": "PortName",
+    "Value": "COM9"
+   },
+   {
+    "Key": "BaudRate",
+    "Value": "115200"
+   },
+   {
+    "Key": "OffsetAngles",
+    "Value": "0"
+   },
+   {
+    "Key": "Code",
+    "Value": "STEERING_PLATFORM001"
+   },
+   {
+    "Key": "PlatformDeviceId",
+    "Value": "2118183502957666306"
+   }
+  ],
+  "CreatedAt": "2026-11-05T09:43:18.7264599"
+ },
+ {
+  "Id": 37,
+  "Name": "华沿机械臂",
+  "DriverId": 53,
+  "DriverName": "华沿 Huayan 机械臂驱动",
+  "DriverTags": [
+   "机械臂",
+   "Huayan",
+   "华沿",
+   "六轴",
+   "ROBOT"
+  ],
+  "Status": "offline",
+  "IsSimulation": false,
+  "IsEnabled": true,
+  "Configs": [
+   {
+    "Key": "IP",
+    "Value": "192.168.10.10"
+   },
+   {
+    "Key": "Port",
+    "Value": "10003"
+   },
+   {
+    "Key": "GripperGid",
+    "Value": "1"
+   },
+   {
+    "Key": "ClawPos1",
+    "Value": "0"
+   },
+   {
+    "Key": "ClawPos2",
+    "Value": "350"
+   },
+   {
+    "Key": "ClawPos3",
+    "Value": "800"
+   },
+   {
+    "Key": "ClawPos4",
+    "Value": "1000"
+   },
+   {
+    "Key": "GripperForce",
+    "Value": "50"
+   },
+   {
+    "Key": "Simulation",
+    "Value": "false"
+   },
+   {
+    "Key": "Code",
+    "Value": "TYPE_ROBOT_ARM001"
+   },
+   {
+    "Key": "PlatformDeviceId",
+    "Value": "2117537458185359361"
+   }
+  ],
+  "CreatedAt": "2026-11-05T09:43:38.3361983"
+ },
+ {
+  "Id": 40,
+  "Name": "料架",
+  "DriverId": 26,
+  "DriverName": "实验室料架驱动",
+  "DriverTags": [
+   "料架",
+   "料位",
+   "储料",
+   "Rack",
+   "Storage"
+  ],
+  "Status": "offline",
+  "IsSimulation": false,
+  "IsEnabled": true,
+  "Configs": [
+   {
+    "Key": "PollIntervalMs",
+    "Value": "2000"
+   },
+   {
+    "Key": "Simulation",
+    "Value": "false"
+   },
+   {
+    "Key": "Code",
+    "Value": "T006001"
+   },
+   {
+    "Key": "PlatformDeviceId",
+    "Value": "2115372101525884929"
+   }
+  ],
+  "CreatedAt": "2026-11-05T10:05:02.7759736"
+ },
+ {
+  "Id": 44,
+  "Name": "灯带",
+  "DriverId": 54,
+  "DriverName": "WS281x 灯带控制器驱动",
+  "DriverTags": [
+   "灯带",
+   "WS2812",
+   "WS2811",
+   "指示灯",
+   "状态灯",
+   "Modbus",
+   "RS485",
+   "RGB",
+   "达牛物联"
+  ],
+  "Status": "offline",
+  "IsSimulation": false,
+  "IsEnabled": false,
+  "Configs": [
+   {
+    "Key": "PortName",
+    "Value": "COM11"
+   },
+   {
+    "Key": "BaudRate",
+    "Value": "9600"
+   },
+   {
+    "Key": "DataBits",
+    "Value": "8"
+   },
+   {
+    "Key": "StopBits",
+    "Value": "One"
+   },
+   {
+    "Key": "Parity",
+    "Value": "None"
+   },
+   {
+    "Key": "SlaveAddress",
+    "Value": "1"
+   },
+   {
+    "Key": "SendCrc",
+    "Value": "true"
+   },
+   {
+    "Key": "VerifyCrc",
+    "Value": "true"
+   },
+   {
+    "Key": "ExpectWriteAck",
+    "Value": "true"
+   },
+   {
+    "Key": "ResponseTimeoutMs",
+    "Value": "600"
+   },
+   {
+    "Key": "Retries",
+    "Value": "1"
+   },
+   {
+    "Key": "CommandGapMs",
+    "Value": "40"
+   },
+   {
+    "Key": "FrameGapMs",
+    "Value": "20"
+   },
+   {
+    "Key": "EnablePolling",
+    "Value": "true"
+   },
+   {
+    "Key": "PollIntervalMs",
+    "Value": "3000"
+   },
+   {
+    "Key": "TrustDeviceSettings",
+    "Value": "true"
+   },
+   {
+    "Key": "AutoAdjustCrc",
+    "Value": "true"
+   },
+   {
+    "Key": "AutoAdjustWriteAck",
+    "Value": "true"
+   },
+   {
+    "Key": "DefaultMode",
+    "Value": "0"
+   },
+   {
+    "Key": "DefaultTimeCoefficient",
+    "Value": "4"
+   },
+   {
+    "Key": "FallbackLedCount",
+    "Value": "150"
+   },
+   {
+    "Key": "MaxLedCount",
+    "Value": "2048"
+   },
+   {
+    "Key": "SimulatedDeviceAddress",
+    "Value": "0"
+   },
+   {
+    "Key": "Simulation",
+    "Value": "false"
+   },
+   {
+    "Key": "Code",
+    "Value": "T007001"
+   },
+   {
+    "Key": "PlatformDeviceId",
+    "Value": "2118602123257208833"
+   }
+  ],
+  "CreatedAt": "2026-11-09T06:23:41.7392082"
+ },
+ {
+  "Id": 46,
+  "Name": "PCR仪",
+  "DriverId": 55,
+  "DriverName": "Arhat-auto 96 自动化热封PCR仪驱动",
+  "DriverTags": [
+   "莫纳",
+   "Mona",
+   "Arhat",
+   "PCR",
+   "热封",
+   "热循环",
+   "基因扩增",
+   "MODBUS",
+   "RTU",
+   "串口"
+  ],
+  "Status": "offline",
+  "IsSimulation": false,
+  "IsEnabled": true,
+  "Configs": [
+   {
+    "Key": "PortName",
+    "Value": "COM12"
+   },
+   {
+    "Key": "BaudRate",
+    "Value": "19200"
+   },
+   {
+    "Key": "DataBits",
+    "Value": "8"
+   },
+   {
+    "Key": "StopBits",
+    "Value": "One"
+   },
+   {
+    "Key": "Parity",
+    "Value": "None"
+   },
+   {
+    "Key": "SlaveAddress",
+    "Value": "1"
+   },
+   {
+    "Key": "ResponseTimeoutMs",
+    "Value": "3000"
+   },
+   {
+    "Key": "CommandGapMs",
+    "Value": "50"
+   },
+   {
+    "Key": "PollIntervalMs",
+    "Value": "1000"
+   },
+   {
+    "Key": "DeviceModel",
+    "Value": "Auto"
+   },
+   {
+    "Key": "TemperatureOffset",
+    "Value": "0"
+   },
+   {
+    "Key": "MaxPcrSteps",
+    "Value": "30"
+   },
+   {
+    "Key": "AutoStartOnProgramWrite",
+    "Value": "true"
+   },
+   {
+    "Key": "StopPcrOnClose",
+    "Value": "false"
+   },
+   {
+    "Key": "ChecksumPolicy",
+    "Value": "Strict"
+   },
+   {
+    "Key": "MaxRetries",
+    "Value": "1"
+   },
+   {
+    "Key": "AllowRawCommand",
+    "Value": "false"
+   },
+   {
+    "Key": "ReleaseAfterFailures",
+    "Value": "5"
+   },
+   {
+    "Key": "Code",
+    "Value": "PCR002"
+   },
+   {
+    "Key": "PlatformDeviceId",
+    "Value": "2119718069915140098"
+   }
+  ],
+  "CreatedAt": "2026-11-09T09:57:40.2013715"
+ },
+ {
+  "Id": 48,
+  "Name": "恒温振荡模组",
+  "DriverId": 56,
+  "DriverName": "耐优 MCHS 恒温振荡模组驱动",
+  "DriverTags": [
+   "NAYO",
+   "耐优",
+   "恒温振荡",
+   "MCHS",
+   "串口",
+   "RS485"
+  ],
+  "Status": "offline",
+  "IsSimulation": false,
+  "IsEnabled": true,
+  "Configs": [
+   {
+    "Key": "PortName",
+    "Value": "COM11"
+   },
+   {
+    "Key": "BaudRate",
+    "Value": "115200"
+   },
+   {
+    "Key": "DataBits",
+    "Value": "8"
+   },
+   {
+    "Key": "StopBits",
+    "Value": "One"
+   },
+   {
+    "Key": "Parity",
+    "Value": "None"
+   },
+   {
+    "Key": "Handshake",
+    "Value": "None"
+   },
+   {
+    "Key": "ModuleId",
+    "Value": "2"
+   },
+   {
+    "Key": "CommandTimeoutMs",
+    "Value": "1000"
+   },
+   {
+    "Key": "RetryCount",
+    "Value": "2"
+   },
+   {
+    "Key": "PollIntervalMs",
+    "Value": "2000"
+   },
+   {
+    "Key": "SpeedUpperLimit",
+    "Value": "3000"
+   },
+   {
+    "Key": "SpeedLowerLimit",
+    "Value": "200"
+   },
+   {
+    "Key": "TemperatureUpperLimit",
+    "Value": "120"
+   },
+   {
+    "Key": "TemperatureLowerLimit",
+    "Value": "-10"
+   },
+   {
+    "Key": "HomeOnConnect",
+    "Value": "false"
+   },
+   {
+    "Key": "ReleaseClampOnConnect",
+    "Value": "true"
+   },
+   {
+    "Key": "WaitShakeCompletion",
+    "Value": "true"
+   },
+   {
+    "Key": "ReleaseClampAfterShake",
+    "Value": "true"
+   },
+   {
+    "Key": "HomeOnShakeStop",
+    "Value": "true"
+   },
+   {
+    "Key": "ShakeWatchIntervalMs",
+    "Value": "1000"
+   },
+   {
+    "Key": "ShakeStartTimeoutMs",
+    "Value": "15000"
+   },
+   {
+    "Key": "ShakeStopGraceMs",
+    "Value": "10000"
+   },
+   {
+    "Key": "ClampTimeoutMs",
+    "Value": "15000"
+   },
+   {
+    "Key": "ClampPollIntervalMs",
+    "Value": "500"
+   },
+   {
+    "Key": "WaitClampArrival",
+    "Value": "true"
+   },
+   {
+    "Key": "Code",
+    "Value": "T002001"
+   },
+   {
+    "Key": "PlatformDeviceId",
+    "Value": "2120696934643298306"
+   }
+  ],
+  "CreatedAt": "2026-11-12T09:26:23.8981964"
+ }
+]

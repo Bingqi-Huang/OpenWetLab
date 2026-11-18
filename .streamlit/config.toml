@@ -1,0 +1,46 @@
+# WetLab 网页的主题与界面设置。在仓库根目录执行 `streamlit run wetlab/app/web/main.py` 时读取本文件。
+# 自绘组件的颜色在 wetlab/app/web/style.css 的 :root 中，与这里保持一致。
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0F766E"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F5F7"
+textColor = "#1C2430"
+linkColor = "#0F766E"
+linkUnderline = false
+borderColor = "#E2E6EB"
+showWidgetBorder = true
+baseRadius = "10px"
+buttonRadius = "8px"
+baseFontSize = 15
+font = "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
+headingFont = "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans CJK SC, sans-serif"
+headingFontSizes = ["1.6rem", "1.25rem", "1.05rem", "0.95rem", "0.9rem", "0.85rem"]
+headingFontWeights = [650, 620, 600, 600, 600, 600]
+paddingTop = "1.25rem"
+redColor = "#B42318"
+redBackgroundColor = "#FDEDEC"
+redTextColor = "#912018"
+orangeColor = "#B45309"
+orangeBackgroundColor = "#FEF5E7"
+orangeTextColor = "#92400E"
+yellowColor = "#A16207"
+yellowBackgroundColor = "#FEF9E7"
+yellowTextColor = "#854D0E"
+greenColor = "#15803D"
+greenBackgroundColor = "#EAF7EF"
+greenTextColor = "#166534"
+blueColor = "#1D4ED8"
+blueBackgroundColor = "#EEF3FE"
+blueTextColor = "#1E40AF"
+grayColor = "#5F6B7A"
+grayBackgroundColor = "#F1F3F5"
+grayTextColor = "#4B5563"
+dataframeHeaderBackgroundColor = "#F6F7F9"

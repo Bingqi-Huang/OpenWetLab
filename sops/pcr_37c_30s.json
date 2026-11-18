@@ -1,0 +1,42 @@
+{
+  "name": "37℃ 保持 30 秒",
+  "labware": {
+    "LW-001": "pcr"
+  },
+  "steps": [
+    {
+      "skill": "pcr_close",
+      "args": {}
+    },
+    {
+      "skill": "pcr_start_program",
+      "args": {
+        "stages": [
+          {
+            "temperature_c": 37,
+            "hold_seconds": 30
+          }
+        ],
+        "volume_ul": 50,
+        "lid_c": null
+      }
+    },
+    {
+      "wait_until": {
+        "device": "pcr",
+        "state": {
+          "PcrState": "Idle"
+        },
+        "max_seconds": 600
+      }
+    },
+    {
+      "skill": "pcr_confirm_finished",
+      "args": {}
+    },
+    {
+      "skill": "pcr_open",
+      "args": {}
+    }
+  ]
+}
