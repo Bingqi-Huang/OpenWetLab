@@ -18,7 +18,9 @@ def test_experiment_result_lists_all_protocol_versions_and_scopes_labware(tmp_pa
     backend = SimBackend(
         Scenario(
             labware={"LW-001": "shaker", "LW-OTHER": "rack:1-3"},
-            faults=[Fault(device="pcr", action="OpenDoor", nth=1, kind="fail", message="门卡住")],
+            faults=[
+                Fault(device="pcr", action="ListFiles", nth=1, kind="fail", message="读取失败")
+            ],
         )
     )
     svc = Service(backend, conn, runs_dir=runs_dir)
@@ -155,7 +157,7 @@ def test_experiment_result_lists_all_protocol_versions_and_scopes_labware(tmp_pa
                     "labware": {"LW-001": "shaker"},
                     "steps": [
                         {"skill": "shake", "args": {"seconds": 6, "rpm": 600}},
-                        {"skill": "pcr_open", "args": {}},
+                        {"skill": "pcr_list_programs", "args": {}},
                         {"skill": "pcr_close", "args": {}},
                     ],
                 },
@@ -198,7 +200,7 @@ def test_experiment_result_lists_all_protocol_versions_and_scopes_labware(tmp_pa
                     "name": "v3剩余步骤",
                     "labware": {"LW-001": "shaker"},
                     "steps": [
-                        {"skill": "pcr_open", "args": {}},
+                        {"skill": "pcr_list_programs", "args": {}},
                         {"skill": "pcr_close", "args": {}},
                     ],
                 },
@@ -247,12 +249,12 @@ def test_experiment_result_lists_all_protocol_versions_and_scopes_labware(tmp_pa
         assert res.protocols[1].status == "failed"
         assert [(s.n, s.skill, s.status) for s in res.protocols[1].steps] == [
             (1, "shake", "succeeded"),
-            (2, "pcr_open", "failed"),
+            (2, "pcr_list_programs", "failed"),
             (3, "pcr_close", "pending"),
         ]
         assert res.protocols[2].status == "done"
         assert [(s.n, s.skill, s.status) for s in res.protocols[2].steps] == [
-            (1, "pcr_open", "succeeded"),
+            (1, "pcr_list_programs", "succeeded"),
             (2, "pcr_close", "succeeded"),
         ]
 

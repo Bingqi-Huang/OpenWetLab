@@ -202,7 +202,13 @@ def test_real_llm_submits_only_remaining_steps_after_mid_protocol_failure(
         Scenario(
             labware={"LW-001": "shaker"},
             faults=[
-                Fault(device="pcr", action="OpenDoor", nth=1, kind="fail", message="仓门瞬时卡阻")
+                Fault(
+                    device="pcr",
+                    action="ListFiles",
+                    nth=1,
+                    kind="fail",
+                    message="程序列表读取瞬时超时",
+                )
             ],
         )
     )
@@ -227,7 +233,7 @@ def test_real_llm_submits_only_remaining_steps_after_mid_protocol_failure(
             payload={
                 "mission_id": "M-REM",
                 "title": "失败续做测试",
-                "input_text": "请对振荡模组上的 LW-001 以 450 rpm 振荡 15 秒，然后打开 PCR 仓门再关闭 PCR 仓门。",
+                "input_text": "请对振荡模组上的 LW-001 以 450 rpm 振荡 15 秒，然后列出 PCR 程序列表再关闭 PCR 仓门。",
             },
         )
     svc.step()
@@ -269,7 +275,7 @@ def test_real_llm_submits_only_remaining_steps_after_mid_protocol_failure(
         assert p2["rehearsal"]["ok"] is True
         v2_skills = [s.get("skill") for s in p2["content"]["steps"]]
         assert "shake" not in v2_skills
-        assert "pcr_open" in v2_skills and "pcr_close" in v2_skills
+        assert "pcr_list_programs" in v2_skills and "pcr_close" in v2_skills
     finally:
         worker.close()
         conn.close()
