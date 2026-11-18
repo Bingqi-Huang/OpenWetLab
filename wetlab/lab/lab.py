@@ -147,6 +147,7 @@ class Lab:
             if (
                 age is not None
                 and (poll_now - float(age)) >= returned_at - 1e-6
+                and dev_state.get("WorkingStatus") != 1
                 and all(dev_state.get(prop) is not None for prop in dev.spec.STATE_PROPS)
             ):
                 return True

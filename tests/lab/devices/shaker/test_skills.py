@@ -58,7 +58,7 @@ def test_shake_start_and_shake_stop_normal_and_early_stop():
     assert last_ev["detail"]["seconds"] >= 25.0
     assert last_ev["detail"]["ended_early"] is False
 
-    # Start again, then stop externally before shake_stop -> failed / SHAKE_ENDED_EARLY + records duration.
+    # Start again, then stop externally before shake_stop -> SHAKE_ENDED_EARLY + records duration.
     registry.call(lab, "shake_start", rpm=800)
     backend.sleep(12.0)
     backend.call("T002001", "StopShake", {}, 15)
@@ -75,3 +75,18 @@ def test_shake_start_and_shake_stop_normal_and_early_stop():
     # Offline gateway blocks shake_stop.
     backend.gateway_online = False
     assert registry.call(lab, "shake_stop")["status"] == "blocked"
+
+
+def test_shake_stop_during_ramp_state_4_does_not_raise_ended_early():
+    """#32: If shaker is ramping (`ShakeState == 4`, speed 0), `shake_stop` stops cleanly."""
+    lab, backend = _make_lab()
+    registry.call(lab, "shake_start", rpm=600)
+    backend.world.device("shaker").props["ShakeState"] = 4
+    backend.world.device("shaker").props["ActualSpeed"] = 0
+    backend.sleep(2.0)
+
+    stopped = registry.call(lab, "shake_stop")
+    assert stopped["ok"] is True
+    assert stopped["state_after"]["shaker"]["ShakeState"] == 1
+    assert stopped["state_after"]["shaker"]["ElmState"] == 2
+    assert stopped["state_after"]["shaker"]["ActualSpeed"] == 0
