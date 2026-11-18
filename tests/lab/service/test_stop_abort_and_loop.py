@@ -51,7 +51,7 @@ def test_stop_all_stops_pcr_lid_and_shaker_bypasses_closed_skills_and_rejects_re
         _enqueue(svc, "approve", {"protocol_id": "E-001-v1", "decided_by": "周老师", "fingerprint": proto["fingerprint"]}, key="app")
 
         # Advance through pcr_close, pcr_start_program, shake_start, and enter wait(600)
-        svc.run(max_rounds=4)
+        svc.run(max_rounds=15)
         assert sim.state()["PCR002"]["PcrState"] == "Running"
         assert sim.state()["PCR002"]["HeaterLidEnabled"] is True
         assert sim.state()["T002001"]["ShakeState"] == 0

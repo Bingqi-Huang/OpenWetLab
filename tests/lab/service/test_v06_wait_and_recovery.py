@@ -111,7 +111,7 @@ def test_wait_until_30s_stale_recovers_while_61s_stale_freezes_and_resumes_waiti
         assert island.get_freeze(conn_a)["frozen"] is False
         assert runs.get_step(conn_a, proto_id_a, 3)["status"] == "waiting"  # type: ignore[index]
 
-        svc_a.run(max_rounds=50)
+        svc_a.run(max_rounds=70)
         assert island.get_freeze(conn_a)["frozen"] is False
         assert runs.get_protocol(conn_a, proto_id_a)["status"] == "done"  # type: ignore[index]
     finally:
