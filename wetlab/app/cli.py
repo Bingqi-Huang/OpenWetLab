@@ -142,7 +142,8 @@ def cmd_rehearse(args: argparse.Namespace) -> int:
     proto = json.loads(Path(args.file).read_text(encoding="utf-8"))
     with _db(args) as conn:
         res = rehearse(conn, proto)
-    print(render(proto, res), end="")
+        rendered = render(proto, res, conn=conn)
+    print(rendered, end="")
     return 0 if res["ok"] else 1
 
 

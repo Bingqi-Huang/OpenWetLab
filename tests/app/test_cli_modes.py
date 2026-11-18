@@ -54,7 +54,9 @@ def test_cli_mode_and_env_isolate_virtual_and_real_directories(
     assert main(["status", "--json", "--mode", "virtual"]) == 0
     v_status = json.loads(capsys.readouterr().out)
     assert v_status["mode"] == "virtual"
-    assert v_status["snapshot"]["labware"] == {"LW-VIRT": "pcr"}
+    assert v_status["snapshot"]["labware"] == {
+        "LW-VIRT": {"position": "pcr", "type": "96_plate", "contents": []}
+    }
 
     assert main(["status", "--json", "--mode", "real"]) == 0
     r_status = json.loads(capsys.readouterr().out)

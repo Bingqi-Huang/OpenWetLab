@@ -106,7 +106,7 @@ def handle_submit_protocol(
     try:
         proto = coerce_protocol(raw_proto)
         fp = fingerprint(proto)
-        text_md = render(proto, rehearsal_res)
+        text_md = render(proto, rehearsal_res, conn=conn)
         content_dict = proto.model_dump(mode="json")
     except ValidationError:
         proto = None

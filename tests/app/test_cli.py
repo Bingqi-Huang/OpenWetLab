@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from wetlab.app.cli import main, run_doctor
+from wetlab.lab.materials import Materials
 from wetlab.lab.mqtt import MqttBackend
 from wetlab.lab.service.reconcile import sync_device_state
 from wetlab.lab.store import island, open_db, runs
@@ -32,10 +33,23 @@ def test_cli_full_workflow_labware_rehearse_submit_approve_pause_resume_status_a
     assert _cli(db, runs_dir, "serve", "--mode", "virtual", "--once") == 0
     capsys.readouterr()
 
+    assert _cli(db, runs_dir, "status", "--json") == 0
+    empty_status = json.loads(capsys.readouterr().out)
+    assert empty_status["snapshot"]["labware"] == {
+        "LW-001": {"position": "pcr", "type": "96_plate", "contents": []}
+    }
+
+    with open_db(db) as conn:
+        Materials(conn).set_contents(
+            "LW-001",
+            [{"name": "SynCom-1", "wells": ["A1"], "volume_ul": 25.0, "note": "待扩增"}],
+        )
+
     assert _cli(db, runs_dir, "rehearse", SOP_FILE) == 0
     reh_out = capsys.readouterr().out
     assert "执行前现场应该是这样" in reh_out
     assert "37℃ 30 秒" in reh_out
+    assert "SynCom-1" in reh_out
 
     mid = "M-20261118-099"
     assert _cli(db, runs_dir, "submit", SOP_FILE, "--mission-id", mid, "--key", "s1") == 0
@@ -47,9 +61,18 @@ def test_cli_full_workflow_labware_rehearse_submit_approve_pause_resume_status_a
     assert _cli(db, runs_dir, "status", "--json") == 0
     st_json = json.loads(capsys.readouterr().out)
     assert st_json["mode"] == "virtual"
-    assert st_json["snapshot"]["labware"] == {"LW-001": "pcr"}
+    assert st_json["snapshot"]["labware"] == {
+        "LW-001": {
+            "position": "pcr",
+            "type": "96_plate",
+            "contents": [
+                {"name": "SynCom-1", "wells": ["A1"], "volume_ul": 25.0, "note": "待扩增"}
+            ],
+        }
+    }
     assert st_json["protocols"][0]["id"] == "E-001-v1"
     assert st_json["protocols"][0]["status"] == "submitted"
+    assert "SynCom-1" in st_json["protocols"][0]["text_md"]
     assert _cli(db, runs_dir, "status") == 0
     assert "E-001-v1: status=submitted" in capsys.readouterr().out
 
@@ -68,7 +91,7 @@ def test_cli_full_workflow_labware_rehearse_submit_approve_pause_resume_status_a
         assert proto_paused["status"] == "paused"
 
     assert _cli(db, runs_dir, "resume", "--protocol-id", "E-001-v1") == 0
-    assert _cli(db, runs_dir, "serve", "--mode", "virtual", "--rounds", "45") == 0
+    assert _cli(db, runs_dir, "serve", "--mode", "virtual", "--rounds", "70") == 0
     with open_db(db) as conn:
         proto_done = runs.get_protocol(conn, "E-001-v1")
         assert proto_done is not None
