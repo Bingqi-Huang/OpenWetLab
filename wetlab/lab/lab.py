@@ -2,8 +2,9 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 import sqlite3
-from typing import Any
+from typing import Any, NoReturn
 
 from . import safety
 from .backend import Backend
@@ -17,6 +18,16 @@ DEFAULT_TIMEOUT_S = 15.0
 TIMEOUT_MARGIN_S = 20.0
 FRESH_STATE_TIMEOUT_S = 10.0
 FRESH_POLL_INTERVAL_S = 0.2
+
+
+@dataclass(frozen=True)
+class _OpCtx:
+    seq: int
+    op_id: str
+    device: str
+    action: str
+    params: dict[str, Any]
+    started_at: float
 
 
 @contextmanager
@@ -102,6 +113,30 @@ class Lab:
         self.last_operation_id = rec_id
         return rec_id
 
+    def _fail_unknown(
+        self,
+        ctx: _OpCtx,
+        code: str,
+        msg: str,
+        result: dict[str, Any] | None = None,
+    ) -> NoReturn:
+        now = self.backend.now()
+        self._record(
+            seq=ctx.seq,
+            op_id=ctx.op_id,
+            device=ctx.device,
+            action=ctx.action,
+            params=ctx.params,
+            status="unknown",
+            result=result,
+            error_code=code,
+            started_at=ctx.started_at,
+            elapsed_s=now - ctx.started_at,
+            freeze_reason=msg,
+            freeze_at=now,
+        )
+        raise Unknown(code, msg)
+
     def _wait_fresh_state(self, device: str, returned_at: float) -> bool:
         dev = BY_NAME[device]
         deadline = returned_at + FRESH_STATE_TIMEOUT_S
@@ -112,6 +147,7 @@ class Lab:
             if (
                 age is not None
                 and (poll_now - float(age)) >= returned_at - 1e-6
+                and dev_state.get("WorkingStatus") != 1
                 and all(dev_state.get(prop) is not None for prop in dev.spec.STATE_PROPS)
             ):
                 return True
@@ -168,6 +204,7 @@ class Lab:
         # 3. Allocate operation ID before dispatch and call backend once.
         seq = records.next_operation_seq(self.conn)
         op_id = f"WL-{int(started_at * 1000)}-{seq}"
+        ctx = _OpCtx(seq, op_id, device, action, call_params, started_at)
         device_exc: DeviceFailed | None = None
         result: dict[str, Any] = {}
         try:
@@ -181,27 +218,17 @@ class Lab:
         except DeviceFailed as exc:
             device_exc = exc
         except NoResult:
-            now = self.backend.now()
             msg = f"{device}.{action} timed out after {effective_timeout}s"
-            self._record(
-                seq=seq,
-                op_id=op_id,
-                device=device,
-                action=action,
-                params=call_params,
-                status="unknown",
-                error_code="TIMEOUT_UNKNOWN",
-                started_at=started_at,
-                elapsed_s=now - started_at,
-                freeze_reason=msg,
-                freeze_at=now,
-            )
-            raise Unknown("TIMEOUT_UNKNOWN", msg)
+            self._fail_unknown(ctx, "TIMEOUT_UNKNOWN", msg)
 
         # 4. Wait up to 10s for a complete telemetry frame received after `returned_at`.
         returned_at = self.backend.now()
         fresh_ok = self._wait_fresh_state(device, returned_at)
         if device_exc is not None:
+            err_payload = {"error": str(device_exc)}
+            if safety.moves(device, action):
+                msg = f"{device}.{action} failed and may have moved: {device_exc}"
+                self._fail_unknown(ctx, "DEVICE_FAILED_MAY_HAVE_MOVED", msg, err_payload)
             elapsed = self.backend.now() - started_at
             self._record(
                 seq=seq,
@@ -210,30 +237,15 @@ class Lab:
                 action=action,
                 params=call_params,
                 status="failed",
-                result={"error": str(device_exc)},
+                result=err_payload,
                 error_code="DEVICE_FAILED",
                 started_at=started_at,
                 elapsed_s=elapsed,
             )
             raise device_exc
         if not fresh_ok and act_meta.kind != READ:
-            now = self.backend.now()
             msg = f"{device}.{action} received no fresh complete telemetry within 10s"
-            self._record(
-                seq=seq,
-                op_id=op_id,
-                device=device,
-                action=action,
-                params=call_params,
-                status="unknown",
-                result=result,
-                error_code="VERIFY_FAILED",
-                started_at=started_at,
-                elapsed_s=now - started_at,
-                freeze_reason=msg,
-                freeze_at=now,
-            )
-            raise Unknown("VERIFY_FAILED", msg)
+            self._fail_unknown(ctx, "VERIFY_FAILED", msg, result)
 
         # 5. Poll telemetry every 1s up to `within_s` until all `expect` properties match.
         if expect:
@@ -246,21 +258,7 @@ class Lab:
                 if now >= deadline:
                     mismatch = {prop: dev_state.get(prop) for prop in expect}
                     msg = f"{device}.{action} verify failed: expected {expect}, got {mismatch}"
-                    self._record(
-                        seq=seq,
-                        op_id=op_id,
-                        device=device,
-                        action=action,
-                        params=call_params,
-                        status="unknown",
-                        result=result,
-                        error_code="VERIFY_FAILED",
-                        started_at=started_at,
-                        elapsed_s=now - started_at,
-                        freeze_reason=msg,
-                        freeze_at=now,
-                    )
-                    raise Unknown("VERIFY_FAILED", msg)
+                    self._fail_unknown(ctx, "VERIFY_FAILED", msg, result)
                 self.backend.sleep(min(1.0, deadline - now))
 
         # 6. Record succeeded operation and return device result.

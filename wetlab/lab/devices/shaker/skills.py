@@ -15,13 +15,14 @@ def shake(
     rpm: Annotated[int, Field(ge=200, le=3000, strict=True)],
 ) -> dict[str, Any]:
     """Clamp the plate, shake for `seconds` at `rpm`, then release the clamp."""
-    lab.do("shaker", "SetClamp", {"clamp": True}, expect={"ElmState": 1}, within_s=5)
+    lab.do("shaker", "SetClamp", {"clamp": True}, expect={"ElmState": 1}, within_s=10)
     lab.do("shaker", "SetTargetSpeed", {"rpm": rpm})
     lab.do(
         "shaker",
         "StartShakeTimed",
         {"seconds": seconds},
         expect={"ActualSpeed": 0, "ShakeState": 1, "ElmState": 2},
+        within_s=15,
         timeout_s=seconds + 30,
     )
     lab.materials.record_at("shaker", "shaken", seconds=seconds, rpm=rpm)
@@ -34,7 +35,7 @@ def shake_start(
     rpm: Annotated[int, Field(ge=200, le=3000, strict=True)],
 ) -> dict[str, Any]:
     """Clamp the plate and start continuous shaking at `rpm`."""
-    lab.do("shaker", "SetClamp", {"clamp": True}, expect={"ElmState": 1}, within_s=5)
+    lab.do("shaker", "SetClamp", {"clamp": True}, expect={"ElmState": 1}, within_s=10)
     lab.do("shaker", "SetTargetSpeed", {"rpm": rpm})
     lab.do("shaker", "StartShake", {}, expect={"ShakeState": 0}, within_s=15)
     lab.materials.record_at("shaker", "shake_started", rpm=rpm)
@@ -46,7 +47,7 @@ def shake_stop(lab) -> dict[str, Any]:
     """Stop continuous shaking, release the clamp, and record actual shaking duration."""
     shaker_before = lab.state().get("shaker") or {}
     already_stopped = (
-        shaker_before.get("ShakeState") != 0
+        shaker_before.get("ShakeState") not in (0, 4)
         and (shaker_before.get("ActualSpeed") or 0) == 0
     )
     check_time = lab.backend.now()
@@ -64,7 +65,8 @@ def shake_stop(lab) -> dict[str, Any]:
     if last_start is None:
         actual_s = 0.0
     elif already_stopped and prev_stop is not None and prev_stop["seq"] > last_start["seq"]:
-        actual_s = max(0.0, round(float(prev_stop["started_at"]) - float(last_start["started_at"]), 1))
+        delta = float(prev_stop["started_at"]) - float(last_start["started_at"])
+        actual_s = max(0.0, round(delta, 1))
     else:
         actual_s = max(0.0, round(check_time - float(last_start["started_at"]), 1))
 

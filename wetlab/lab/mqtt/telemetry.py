@@ -69,8 +69,13 @@ class TelemetryTracker:
                 code = dev.spec.CODE
                 err_val = frame.props.get("error")
                 for key, val in frame.props.items():
-                    if key != "error":
-                        self._props[code][key] = val
+                    if key == "error":
+                        continue
+                    if key.endswith("_error"):
+                        if err_val is None and val is not None and str(val) != "":
+                            err_val = val
+                        continue
+                    self._props[code][key] = val
 
                 is_complete = all(
                     frame.props.get(prop) is not None for prop in dev.spec.STATE_PROPS

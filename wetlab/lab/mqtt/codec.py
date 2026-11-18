@@ -254,9 +254,14 @@ def parse_uplink(topic: str, payload: bytes | str) -> ParsedFrame:
                 return GatewayHeartbeat()
             return UnrecognizedFrame(topic, raw_text, "invalid gateway telemetry")
         if len(parts) == 7 and parts[4] == "motion" and parts[6]:
-            return _parse_rpc_channel(topic, raw_text, msg, parts[5], parts[6], "motion/response", None)
-        if len(parts) == 6 and parts[4] == "device" and isinstance(msg_type, str) and isinstance(body, dict):
-            return IgnoredFrame("gateway_device_mgmt")
+            return _parse_rpc_channel(
+                topic, raw_text, msg, parts[5], parts[6], "motion/response", None
+            )
+        if len(parts) >= 6 and parts[4] == "device" and isinstance(msg_type, str):
+            if isinstance(body, dict):
+                return IgnoredFrame("gateway_device_mgmt")
+        if len(parts) == 5 and parts[4] == "location" and isinstance(msg_type, str):
+            return IgnoredFrame("gateway_location")
         return UnrecognizedFrame(topic, raw_text, "unrecognized gateway topic")
 
     if parts[2] == "devices" and parts[3]:

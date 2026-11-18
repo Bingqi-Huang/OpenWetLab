@@ -112,6 +112,26 @@ def test_allow_list_and_read_only_actions() -> None:
     assert safety.kind("pcr", "RawCommand") is None
     assert safety.kind("T007001", "TurnOn") is None
 
+    expected_moves = {
+        ("pcr", "OpenDoor"),
+        ("pcr", "CloseDoor"),
+        ("pcr", "SetLidMotor"),
+        ("shaker", "SetClamp"),
+        ("shaker", "StartShake"),
+        ("shaker", "StartShakeTimed"),
+        ("shaker", "StopShake"),
+        ("shaker", "Home"),
+        ("turntable", "SingleLoop"),
+        ("arm", "MovMulti"),
+    }
+    for dev in ISLAND:
+        for act_name in dev.spec.ACTIONS:
+            pair = (dev.spec.NAME, act_name)
+            assert safety.moves(dev.spec.NAME, act_name) is (pair in expected_moves)
+    assert safety.moves("pcr", "GetDevices") is False
+    assert safety.moves("pcr", "RawCommand") is False
+    assert safety.moves("unknown", "OpenDoor") is False
+
     assert not safety.check("pcr", "RawCommand", {}, island())[0]
     assert not safety.check("arm", "MovL", {}, island())[0]
     assert not safety.check("T007001", "GetStatus", {}, island())[0]

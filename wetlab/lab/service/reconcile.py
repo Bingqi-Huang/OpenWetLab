@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any
 
 from ..backend import Backend
-from ..devices import ISLAND
+from ..devices import ISLAND, positions_hash
 from ..devices.base import READ
 from ..errors import Blocked, DeviceFailed, Frozen, Unknown
 from ..lab import Lab
@@ -29,16 +29,9 @@ def sync_device_state(
     existing = island.get_all_device_states(conn)
     gw = raw_state.get("_gateway") or {}
     online = bool(gw.get("online"))
-    gw_props = {
-        "online": online,
-        "busy_by_others": bool(gw.get("busy_by_others")),
-    }
+    gw_props = {"online": online, "busy_by_others": bool(gw.get("busy_by_others"))}
     island.upsert_device_state(
-        conn,
-        device="_gateway",
-        props=gw_props,
-        updated_at=now,
-        error=None,
+        conn, device="_gateway", props=gw_props, updated_at=now, error=None
     )
 
     for dev in ISLAND:
@@ -154,22 +147,83 @@ def _freeze_sent_steps(
                 reason = (
                     f"服务重启时发现方案 {proto_id} 第 {step_n} 步处于已发出未确认状态（sent）"
                 )
-                payload = {
-                    "protocol_id": proto_id,
-                    "step_n": step_n,
-                    "reason": reason,
-                }
+                payload = {"protocol_id": proto_id, "step_n": step_n, "reason": reason}
                 with conn:
                     if not island.get_freeze(conn)["frozen"]:
                         island.set_frozen(conn, reason=reason, at=t)
-                    inbox.append_event(
-                        conn,
-                        at=t,
-                        kind="frozen",
-                        ref_id=proto_id,
-                        payload=payload,
-                    )
+                    inbox.append_event(conn, at=t, kind="frozen", ref_id=proto_id, payload=payload)
     return frozen_sent
+
+
+def _entry_device_code(entry: dict[str, Any]) -> str | None:
+    configs = entry.get("Configs")
+    if isinstance(configs, list):
+        for item in configs:
+            if isinstance(item, dict) and item.get("Key") == "Code" and item.get("Value"):
+                return str(item["Value"])
+    top = entry.get("Code") or entry.get("DeviceCode") or entry.get("code")
+    return str(top) if top else None
+
+
+def _check_gateway_devices(res: dict[str, Any]) -> str | None:
+    raw_items = res.get("deviceData")
+    entries = raw_items if isinstance(raw_items, list) else []
+    by_code: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        if isinstance(entry, dict):
+            code = _entry_device_code(entry)
+            if code:
+                by_code.setdefault(code, []).append(entry)
+    missing: list[str] = []
+    disabled: list[str] = []
+    for dev in ISLAND:
+        code = dev.spec.CODE
+        tag = f"{dev.spec.LABEL}({dev.spec.NAME}/{code})"
+        if code not in by_code:
+            missing.append(tag)
+        elif not any(e.get("IsEnabled") is True for e in by_code[code]):
+            disabled.append(tag)
+    parts: list[str] = []
+    if missing:
+        parts.append(f"缺失设备：{'、'.join(missing)}")
+    if disabled:
+        parts.append(f"设备已停用：{'、'.join(disabled)}")
+    return f"网关设备登记异常（{'；'.join(parts)}）" if parts else None
+
+
+def _record_probe_failure(
+    conn: sqlite3.Connection,
+    at: float,
+    reason: str,
+    operation_id: str | None,
+) -> None:
+    with conn:
+        if not island.get_freeze(conn)["frozen"]:
+            island.set_frozen(conn, reason=reason, at=at, operation_id=operation_id)
+        payload = {"reason": reason, "operation_id": operation_id}
+        inbox.append_event(conn, at=at, kind="frozen", payload=payload)
+
+
+def _run_probe(
+    probe_lab: Lab,
+    backend: Backend,
+    conn: sqlite3.Connection,
+    device: str,
+    action: str,
+    prefix: str,
+) -> dict[str, Any] | None:
+    try:
+        return probe_lab.do(device, action)
+    except Unknown as exc:
+        t = backend.now()
+        payload = {"reason": str(exc), "code": exc.code}
+        with conn:
+            inbox.append_event(conn, at=t, kind="frozen", payload=payload)
+        return None
+    except (DeviceFailed, Blocked, Frozen) as exc:
+        msg = f"{prefix} failed: {exc}"
+        _record_probe_failure(conn, backend.now(), msg, probe_lab.last_operation_id)
+        return None
 
 
 def reconcile(
@@ -181,6 +235,7 @@ def reconcile(
     """Persist closed skills, await telemetry warmup, probe read channels, and freeze `sent`."""
     with conn:
         island.set_closed_skills(conn, backend.closed_skills)
+        island.set_meta(conn, "positions_hash", positions_hash())
 
     deadline = backend.now() + warmup_s
     while True:
@@ -206,32 +261,25 @@ def reconcile(
     probed: list[str] = []
     if online:
         probe_lab = Lab(backend, conn)
-        for dev in ISLAND:
+        gw_res = _run_probe(
+            probe_lab, backend, conn, ISLAND[0].spec.NAME, "GetDevices", "startup GetDevices"
+        )
+        devices_ok = False
+        if gw_res is not None:
+            mismatch = _check_gateway_devices(gw_res)
+            if mismatch is not None:
+                _record_probe_failure(conn, backend.now(), mismatch, probe_lab.last_operation_id)
+            else:
+                devices_ok = True
+
+        for dev in ISLAND if devices_ok else ():
             act_name = _read_probe_action(dev)
             if act_name is None:
                 continue
-            try:
-                probe_lab.do(dev.spec.NAME, act_name)
-                probed.append(f"{dev.spec.NAME}.{act_name}")
-            except Unknown as exc:
-                t = backend.now()
-                payload = {"reason": str(exc), "code": exc.code}
-                with conn:
-                    inbox.append_event(conn, at=t, kind="frozen", payload=payload)
+            label = f"startup probe {dev.spec.NAME}.{act_name}"
+            if _run_probe(probe_lab, backend, conn, dev.spec.NAME, act_name, label) is None:
                 break
-            except (DeviceFailed, Blocked, Frozen) as exc:
-                t = backend.now()
-                msg = f"startup probe {dev.spec.NAME}.{act_name} failed: {exc}"
-                with conn:
-                    if not island.get_freeze(conn)["frozen"]:
-                        island.set_frozen(
-                            conn,
-                            reason=msg,
-                            at=t,
-                            operation_id=probe_lab.last_operation_id,
-                        )
-                    inbox.append_event(conn, at=t, kind="frozen", payload={"reason": msg})
-                break
+            probed.append(f"{dev.spec.NAME}.{act_name}")
 
     frozen_sent = _freeze_sent_steps(backend, conn)
     return {

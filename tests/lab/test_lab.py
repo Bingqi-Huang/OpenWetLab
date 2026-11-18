@@ -214,16 +214,28 @@ def test_step4_waits_for_post_return_fresh_frame_and_freezes_act_after_10s() -> 
 
 
 def test_device_failed_waits_for_fresh_frame_without_freezing_and_rollback_safety() -> None:
-    fault = Fault(device="shaker", action="SetClamp", nth=1, kind="fail", message="jam")
-    backend = SimBackend(Scenario(faults=[fault]))
+    """#31: Read-only and non-moving actions raising DeviceFailed do NOT freeze the island."""
+    faults = [
+        Fault(device="shaker", action="SetTargetSpeed", nth=1, kind="fail", message="bad speed"),
+        Fault(device="pcr", action="GetPcrStatus", nth=1, kind="fail", message="read timeout"),
+    ]
+    backend = SimBackend(Scenario(faults=faults))
     conn = open_db(":memory:")
     lab = Lab(backend, conn)
     try:
-        with pytest.raises(DeviceFailed, match="jam"):
-            lab.do("shaker", "SetClamp", {"clamp": True})
+        with pytest.raises(DeviceFailed, match="read timeout"):
+            lab.do("pcr", "GetPcrStatus")
         assert island.get_freeze(conn)["frozen"] is False
-        op = records.list_operations(conn)[0]
-        assert (op["status"], op["error_code"]) == ("failed", "DEVICE_FAILED")
+        op_read = records.list_operations(conn)[0]
+        assert op_read["status"] == "failed"
+        assert op_read["error_code"] == "DEVICE_FAILED"
+
+        with pytest.raises(DeviceFailed, match="bad speed"):
+            lab.do("shaker", "SetTargetSpeed", {"rpm": 500})
+        assert island.get_freeze(conn)["frozen"] is False
+        op_act = records.list_operations(conn)[1]
+        assert op_act["status"] == "failed"
+        assert op_act["error_code"] == "DEVICE_FAILED"
 
         with patch.object(backend, "call", wraps=backend.call) as spy_call:
             with pytest.raises(Blocked):
@@ -240,5 +252,38 @@ def test_device_failed_waits_for_fresh_frame_without_freezing_and_rollback_safet
                 lab2.do("pcr", "OpenDoor")
         assert records.list_operations(conn2) == []
         conn2.close()
+    finally:
+        conn.close()
+
+
+def test_moving_action_device_failed_freezes_with_may_have_moved() -> None:
+    """#31: Moving action raising DeviceFailed freezes island with DEVICE_FAILED_MAY_HAVE_MOVED."""
+    faults = [
+        Fault(
+            device="turntable",
+            action="SingleLoop",
+            nth=1,
+            kind="failed_after_act",
+            message="转向命令未收到电机应答",
+        ),
+    ]
+    backend = SimBackend(Scenario(faults=faults))
+    conn = open_db(":memory:")
+    lab = Lab(backend, conn)
+    try:
+        with pytest.raises(Unknown) as exc_info:
+            lab.do("turntable", "SingleLoop", {"Angle": 90}, expect={"Angles": "90"})
+        assert exc_info.value.code == "DEVICE_FAILED_MAY_HAVE_MOVED"
+        assert "转向命令未收到电机应答" in str(exc_info.value)
+        assert backend.state()["STEERING_PLATFORM001"]["Angles"] == "90"
+
+        frz = island.get_freeze(conn)
+        assert frz["frozen"] is True
+        assert "转向命令未收到电机应答" in (frz["reason"] or "")
+
+        op = records.list_operations(conn)[-1]
+        assert op["status"] == "unknown"
+        assert op["error_code"] == "DEVICE_FAILED_MAY_HAVE_MOVED"
+        assert "转向命令未收到电机应答" in op["result"]["error"]
     finally:
         conn.close()
