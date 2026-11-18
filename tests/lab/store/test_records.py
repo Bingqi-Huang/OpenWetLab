@@ -128,12 +128,18 @@ def test_labware_positions_and_events_history() -> None:
         with conn:
             records.upsert_labware(conn, id="LW-001", type="pcr_plate_96", position="rack:1-3")
             records.insert_labware_event(
-                conn, labware_id="LW-001", at=1.0, what="placed", by="human", detail={"position": "rack:1-3"}
+                conn,
+                labware_id="LW-001",
+                at=1.0,
+                what="placed",
+                by="human",
+                detail={"position": "rack:1-3"},
             )
             records.upsert_labware(conn, id="LW-002", type="pcr_plate_96", position="shaker")
 
-        assert records.get_labware(conn, "LW-001") == {"id": "LW-001", "type": "pcr_plate_96", "position": "rack:1-3"}
-        assert records.get_labware_at(conn, "rack:1-3") == {"id": "LW-001", "type": "pcr_plate_96", "position": "rack:1-3"}
+        expected_lw = {"id": "LW-001", "type": "pcr_plate_96", "position": "rack:1-3"}
+        assert records.get_labware(conn, "LW-001") == expected_lw
+        assert records.get_labware_at(conn, "rack:1-3") == expected_lw
         assert records.get_labware_at(conn, "pcr") is None
 
         with pytest.raises(sqlite3.IntegrityError):

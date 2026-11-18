@@ -128,7 +128,7 @@ def test_protocol_versions_decisions_and_status_transitions() -> None:
                 rehearsal={"ok": True, "total_s": 40.0}, text_md="# 方案 v2",
                 status="submitted", submitted_at=20.0,
             )
-            # Human approves v2 with fresh rehearsal -> enters running, then paused -> running -> done
+            # Human approves v2 with fresh rehearsal -> running -> paused -> running -> done
             runs.decide_protocol(
                 conn, "E-1-v2", status="running", decided_by="Alice",
                 decided_at=25.0, rehearsal={"ok": True, "total_s": 40.0, "rechecked": True},

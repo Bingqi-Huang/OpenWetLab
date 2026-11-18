@@ -135,7 +135,9 @@ def test_load_positions_rejects_missing_vendor_bad_sha_missing_point_and_posture
     v_pt.write_bytes(v_bytes)
     cfg = json.loads((missing_pt / "positions.json").read_text(encoding="utf-8"))
     cfg["source"]["sha256"] = hashlib.sha256(v_bytes).hexdigest()
-    (missing_pt / "positions.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    (missing_pt / "positions.json").write_text(
+        json.dumps(cfg, ensure_ascii=False), encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="2118260185060499457"):
         load_positions(missing_pt)
 
