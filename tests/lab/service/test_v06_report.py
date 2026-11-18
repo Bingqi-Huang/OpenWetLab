@@ -3,7 +3,14 @@
 import json
 from pathlib import Path
 
-from wetlab.lab.service import advance, create_virtual_service, generate_report
+from wetlab.lab.materials import Materials
+from wetlab.lab.service import (
+    advance,
+    create_virtual_service,
+    generate_report,
+    mission_commands,
+    schemas,
+)
 from wetlab.lab.store import island, records, runs
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -173,5 +180,83 @@ def test_report_strictly_isolated_per_mission_and_removed_from_advance(tmp_path:
         m1_recheck = generate_report(svc.conn, "M-FIRST")
         for m2_token in ("M-SECOND", "E-002", "LW-001", "乙老师", "后序任务完成"):
             assert m2_token not in m1_recheck
+    finally:
+        svc.conn.close()
+
+
+def test_report_includes_plate_contents_and_contents_updated_history(tmp_path: Path) -> None:
+    """§5.7 & §16.7 #39: Mission report labware section includes each plate's contents and
+    any `contents_updated` history during the mission, without leaking later missions' edits.
+    """
+    svc = create_virtual_service(tmp_path / "contents_rep.sqlite", runs_dir=tmp_path / "runs")
+    try:
+        svc.startup()
+        _enqueue(
+            svc,
+            "place_labware",
+            {
+                "labware_id": "LW-001",
+                "type": "96孔PCR板",
+                "position": "pcr",
+                "contents": [
+                    {"name": "X", "wells": ["A1", "A2"], "volume_ul": 20.0, "note": "初始样"}
+                ],
+            },
+            key="lw-c1",
+        )
+        _enqueue(
+            svc,
+            "new_mission",
+            {"mission_id": "M-CONT", "title": "内容报告测试", "input_text": "样品X恒温"},
+            key="m-cont",
+        )
+        svc.step()
+
+        upd = schemas.SetLabwareContentsPayload.model_validate(
+            {
+                "labware_id": "LW-001",
+                "contents": [
+                    {"name": "SynCom-1", "wells": None, "volume_ul": 50.0, "note": "终混液"}
+                ],
+            }
+        )
+        with svc.conn:
+            mission_commands.handle_labware(svc.conn, upd, svc.backend.now(), None)
+
+        _enqueue(
+            svc, "submit_protocol", {"mission_id": "M-CONT", "protocol": SOP_37C}, key="s-cont"
+        )
+        svc.step()
+        _enqueue(
+            svc,
+            "finish_experiment",
+            {"experiment_id": "E-001", "status": "completed", "notes": "内容核对无误"},
+            key="fe-cont",
+            who="operator",
+        )
+        _enqueue(
+            svc,
+            "finish_mission",
+            {"mission_id": "M-CONT", "status": "completed", "conclusion": "任务结束"},
+            key="fm-cont",
+            who="coordinator",
+        )
+        svc.step()
+
+        rep_file = tmp_path / "runs" / "M-CONT" / "report.md"
+        text = rep_file.read_text(encoding="utf-8")
+        assert "板内内容：SynCom-1（整板，50 µL，终混液）" in text
+        assert "contents_updated" in text
+        assert "修改板内内容" in text
+        assert "初始样" in text
+
+        svc.backend.sleep(10.0)
+        Materials(svc.conn, svc.backend.now).set_contents(
+            "LW-001",
+            [{"name": "PostMissionSample", "wells": ["H12"], "volume_ul": 99.0, "note": None}],
+        )
+        rechecked = generate_report(svc.conn, "M-CONT")
+        assert "SynCom-1（整板，50 µL，终混液）" in rechecked
+        assert "PostMissionSample" not in rechecked
     finally:
         svc.conn.close()

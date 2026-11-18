@@ -1,10 +1,13 @@
 """Human-readable Chinese Markdown rendering of protocols and rehearsal results (04 section 5.9)."""
 
+from collections.abc import Mapping, Sequence
+import sqlite3
 from typing import Any
 
 from pydantic import TypeAdapter
 
 from ..devices import DEVICE_LABELS, POSITIONS, PROPS
+from ..store import records
 from .model import Protocol, ProtocolStep, SkillStep, WaitStep, WaitUntilStep, coerce_protocol
 
 _STEP = TypeAdapter(ProtocolStep)
@@ -60,7 +63,8 @@ def format_pcr_stages(stages: list[dict[str, Any]]) -> str:
 
 
 def _format_skill_step(step: SkillStep) -> str:
-    name, args = step.skill, step.args
+    name = step.skill
+    args = step.args
     if name == "pcr_start_program":
         stages_text = format_pcr_stages(args.get("stages", []))
         vol = args.get("volume_ul", "?")
@@ -102,8 +106,11 @@ def _format_condition(device: str, prop: str, value: Any) -> str:
 
 
 def describe_step(step: ProtocolStep | dict[str, Any]) -> str:
-    """One-line Chinese description of a protocol step, shared by the review text, web, and CLI."""
-    parsed = step if isinstance(step, (SkillStep, WaitStep, WaitUntilStep)) else _STEP.validate_python(step)
+    """One-line Chinese description of a protocol step, shared by review text, web, and CLI."""
+    if isinstance(step, (SkillStep, WaitStep, WaitUntilStep)):
+        parsed = step
+    else:
+        parsed = _STEP.validate_python(step)
     if isinstance(parsed, SkillStep):
         return _format_skill_step(parsed)
     if isinstance(parsed, WaitStep):
@@ -120,14 +127,19 @@ def labware_paths(protocol: Protocol | dict[str, Any]) -> dict[str, list[str]]:
     paths: dict[str, list[str]] = {lw_id: [pos] for lw_id, pos in sorted(proto.labware.items())}
     for step in proto.steps:
         if isinstance(step, SkillStep) and step.skill == "transfer":
-            paths.setdefault(str(step.args.get("labware_id", "")), []).append(str(step.args.get("to_position", "")))
+            lw_key = str(step.args.get("labware_id", ""))
+            to_pos = str(step.args.get("to_position", ""))
+            paths.setdefault(lw_key, []).append(to_pos)
     return paths
 
 
 def _labware_trajectories(protocol: Protocol) -> list[str]:
     if not protocol.labware:
         return ["- 无登记器皿"]
-    paths = {lw_id: [_pos_label(pos) for pos in stops] for lw_id, stops in labware_paths(protocol).items()}
+    paths = {
+        lw_id: [_pos_label(pos) for pos in stops]
+        for lw_id, stops in labware_paths(protocol).items()
+    }
     lines: list[str] = []
     for lw_id, stops in paths.items():
         if len(stops) == 1:
@@ -137,16 +149,49 @@ def _labware_trajectories(protocol: Protocol) -> list[str]:
     return lines
 
 
+def _format_content_item(item: Mapping[str, Any]) -> str:
+    name = str(item.get("name", ""))
+    raw_wells = item.get("wells")
+    wells_str = f"孔位 {'、'.join(str(w) for w in raw_wells)}" if raw_wells else "整板"
+    meta: list[str] = [wells_str]
+    vol = item.get("volume_ul")
+    if vol is not None:
+        meta.append(f"{float(vol):g} µL")
+    note = item.get("note")
+    if note:
+        meta.append(str(note))
+    return f"{name}（{'，'.join(meta)}）"
+
+
+def format_contents_text(items: Sequence[Mapping[str, Any]]) -> str:
+    """Format a plate's `contents` items into concise human-readable Chinese."""
+    return "；".join(_format_content_item(item) for item in items)
+
+
 def render(
     protocol: Protocol | dict[str, Any],
     rehearsal: dict[str, Any] | None = None,
+    *,
+    conn: sqlite3.Connection | None = None,
+    contents: dict[str, list[dict[str, Any]]] | None = None,
 ) -> str:
     """Render `protocol` and optional `rehearsal` outcome into Chinese Markdown."""
     proto = coerce_protocol(protocol)
+    resolved_contents: dict[str, list[dict[str, Any]]] | None = None
+    if contents is not None:
+        resolved_contents = dict(contents)
+    elif conn is not None:
+        resolved_contents = records.list_contents_by_labware(conn)
+
     lines: list[str] = [f"# {proto.name}", "", "## 执行前现场应该是这样"]
     if proto.labware:
         for lw_id, pos in sorted(proto.labware.items()):
-            lines.append(f"- [ ] 器皿 {lw_id} 位于 {_pos_label(pos)}")
+            line = f"- [ ] 器皿 {lw_id} 位于 {_pos_label(pos)}"
+            if resolved_contents is not None:
+                plate_items = resolved_contents.get(lw_id) or []
+                if plate_items:
+                    line = f"{line}——内容：{format_contents_text(plate_items)}"
+            lines.append(line)
     else:
         lines.append("- [ ] 台面无预置器皿")
 
