@@ -209,14 +209,33 @@ def test_step_failure_gateway_offline_and_unexpected_loop_exception(tmp_path: Pa
     unexpected exception in loop freezes and emits event without exiting service.
     """
     conn = open_db(tmp_path / "wetlab.sqlite")
-    sim = SimBackend(Scenario(faults=[Fault(device="pcr", action="OpenDoor", at_call=1, kind="fail", message="仓门卡阻")]))
+    list_fault = Fault(device="pcr", action="ListFiles", nth=1, kind="fail", message="读取程序失败")
+    sim = SimBackend(Scenario(faults=[list_fault]))
     notified: list[str] = []
-    svc = Service(sim, conn, runs_dir=tmp_path / "runs", notify_fn=lambda ev: notified.append(ev["kind"]))
+    svc = Service(
+        sim,
+        conn,
+        runs_dir=tmp_path / "runs",
+        notify_fn=lambda ev: notified.append(ev["kind"]),
+    )
     try:
         svc.startup()
-        # Row 10: Step 1 (`pcr_open`) fails -> protocol `failed`, `protocol_failed` event, Step 2 stays `pending`
-        _enqueue(svc, "new_mission", {"mission_id": "M-20261118-015", "title": "异常测试", "input_text": "err", "mode": "virtual"}, key="m")
-        fail_proto = {"name": "开门失败测试", "labware": {}, "steps": [{"skill": "pcr_open", "args": {}}, {"skill": "pcr_close", "args": {}}]}
+        # Row 10: Non-moving step 1 fails -> protocol `failed` & Step 2 `pending`
+        mission_payload = {
+            "mission_id": "M-20261118-015",
+            "title": "异常测试",
+            "input_text": "err",
+            "mode": "virtual",
+        }
+        _enqueue(svc, "new_mission", mission_payload, key="m")
+        fail_proto = {
+            "name": "读取程序失败测试",
+            "labware": {},
+            "steps": [
+                {"skill": "pcr_list_programs", "args": {}},
+                {"skill": "pcr_close", "args": {}},
+            ],
+        }
         _enqueue(svc, "submit_protocol", {"mission_id": "M-20261118-015", "protocol": fail_proto}, key="sub")
         svc.step()
         proto = runs.get_protocol(conn, "E-001-v1")

@@ -44,7 +44,15 @@ def test_step_failure_wakes_operator_with_step_facts_to_submit_revision(tmp_path
     backend = SimBackend(
         Scenario(
             labware={"LW-001": "shaker"},
-            faults=[Fault(device="pcr", action="OpenDoor", nth=1, kind="fail", message="仓门瞬时卡阻")],
+            faults=[
+                Fault(
+                    device="pcr",
+                    action="ListFiles",
+                    nth=1,
+                    kind="fail",
+                    message="读取程序列表失败",
+                )
+            ],
         )
     )
     svc = Service(backend, conn, runs_dir=runs_dir)
@@ -62,19 +70,19 @@ def test_step_failure_wakes_operator_with_step_facts_to_submit_revision(tmp_path
     exp_id = seed_mission_and_experiment(svc)
 
     v1_proto = {
-        "name": "振荡后开关门",
+        "name": "振荡后列程序并关门",
         "labware": {"LW-001": "shaker"},
         "steps": [
             {"skill": "shake", "args": {"seconds": 5, "rpm": 300}},
-            {"skill": "pcr_open", "args": {}},
+            {"skill": "pcr_list_programs", "args": {}},
             {"skill": "pcr_close", "args": {}},
         ],
     }
     revised_v2_proto = {
-        "name": "仅剩余开关门步骤",
+        "name": "仅剩余列程序与关门步骤",
         "labware": {"LW-001": "shaker"},
         "steps": [
-            {"skill": "pcr_open", "args": {}},
+            {"skill": "pcr_list_programs", "args": {}},
             {"skill": "pcr_close", "args": {}},
         ],
     }
@@ -127,7 +135,7 @@ def test_step_failure_wakes_operator_with_step_facts_to_submit_revision(tmp_path
         p2 = runs.get_protocol(conn, f"{exp_id}-v2")
         assert p2 is not None and p2["status"] == "submitted"
         v2_skills = [s["skill"] for s in p2["content"]["steps"]]
-        assert v2_skills == ["pcr_open", "pcr_close"]
+        assert v2_skills == ["pcr_list_programs", "pcr_close"]
     finally:
         worker.close()
         conn.close()

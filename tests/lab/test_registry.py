@@ -117,16 +117,24 @@ def test_all_six_return_statuses_conform_to_01_section_5_1():
     _check_envelope(r_bad_arg, "blocked")
     assert r_bad_arg["error"]["code"] == "INVALID_ARGUMENT"
 
-    # 3. failed (DEVICE_FAILED on step 2 of pcr_open, capturing step 1 + step 2 operation_ids)
+    # 3. failed (DEVICE_FAILED on step 2 of shake, capturing step 1 + step 2 operation_ids)
     conn2 = open_db(":memory:")
     b_fail = SimBackend(
         Scenario(
-            labware={"LW-001": "pcr"},
-            faults=[Fault(device="pcr", action="OpenDoor", nth=1, kind="fail", message="门电机异常")],
+            labware={"LW-001": "shaker"},
+            faults=[
+                Fault(
+                    device="shaker",
+                    action="SetTargetSpeed",
+                    nth=1,
+                    kind="fail",
+                    message="转速设定失败",
+                )
+            ],
         )
     )
     lab2 = Lab(b_fail, conn2)
-    r_fail = registry.call(lab2, "pcr_open")
+    r_fail = registry.call(lab2, "shake", seconds=5, rpm=300)
     _check_envelope(r_fail, "failed")
     assert r_fail["error"]["code"] == "DEVICE_FAILED"
     assert len(r_fail["operation_ids"]) == 2
