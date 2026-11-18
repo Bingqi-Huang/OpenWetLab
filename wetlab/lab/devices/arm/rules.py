@@ -24,8 +24,11 @@ def check(action: str, params: dict, state: dict) -> str | None:
     if not isinstance(tasks, list) or not tasks:
         return "MovMulti blocked: Tasks must be a non-empty list"
     for i, task in enumerate(tasks, start=1):
-        if not isinstance(task, dict) or task.get("PositionId") is None:
-            return f"MovMulti task {i}: missing PositionId"
+        if not isinstance(task, dict):
+            return f"MovMulti task {i}: must be a dict"
+        pos_id = task.get("PositionId")
+        if isinstance(pos_id, bool) or not isinstance(pos_id, int):
+            return f"MovMulti task {i}: PositionId must be an integer"
     if (params.get("Material") or {}).get("Speed") not in ARM_SPEEDS:
         return f"arm Speed must be one of {sorted(ARM_SPEEDS)}"
     return None

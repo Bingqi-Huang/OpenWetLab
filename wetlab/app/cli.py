@@ -16,6 +16,7 @@ from wetlab.agents.worker import run_worker
 from wetlab.app.cli_parser import build_cli_parser
 from wetlab.app.doctor import clock_now, run_doctor
 from wetlab.lab import registry
+from wetlab.lab.devices.positions import run_points_import_cli
 from wetlab.lab.protocol import fingerprint, rehearse, render
 from wetlab.lab.service.main import run_daemon
 from wetlab.lab.snapshot import read_snapshot
@@ -248,6 +249,13 @@ def cmd_tools_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_points(args: argparse.Namespace) -> int:
+    island_dir = Path(args.island_dir) if args.island_dir else None
+    return run_points_import_cli(
+        Path(args.file), island_dir=island_dir, date_str=args.date, assume_yes=bool(args.yes)
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     return build_cli_parser(
         {
@@ -266,6 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
             "status": cmd_status,
             "doctor": cmd_doctor,
             "tools": cmd_tools_export,
+            "points": cmd_points,
         }
     )
 

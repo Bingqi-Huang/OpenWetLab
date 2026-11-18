@@ -43,8 +43,20 @@ def test_arm_must_be_idle_normal_and_gripper_connected():
 
 
 def test_movmulti_tasks_and_speed_validation():
-    assert rules.check("MovMulti", {"Tasks": [], "Material": {"Speed": "低速"}}, {"arm": ARM_IDLE}) is not None
-    assert rules.check("MovMulti", {"Tasks": [{}], "Material": {"Speed": "低速"}}, {"arm": ARM_IDLE}) is not None
+    empty_tasks = {"Tasks": [], "Material": {"Speed": "低速"}}
+    assert rules.check("MovMulti", empty_tasks, {"arm": ARM_IDLE}) is not None
+    missing_pid = {"Tasks": [{}], "Material": {"Speed": "低速"}}
+    assert rules.check("MovMulti", missing_pid, {"arm": ARM_IDLE}) is not None
+    str_pid = {
+        "Tasks": [{"PositionId": "2120809646631186433", "ClawSwitch": 1}],
+        "Material": {"Speed": "低速"},
+    }
+    assert rules.check("MovMulti", str_pid, {"arm": ARM_IDLE}) is not None
+    bool_pid = {
+        "Tasks": [{"PositionId": True, "ClawSwitch": 1}],
+        "Material": {"Speed": "低速"},
+    }
+    assert rules.check("MovMulti", bool_pid, {"arm": ARM_IDLE}) is not None
     assert (
         rules.check(
             "MovMulti",
