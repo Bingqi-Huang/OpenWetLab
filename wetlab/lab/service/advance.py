@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any
 
 from ..backend import Backend
-from ..devices import BY_NAME
+from ..devices import BY_NAME, positions_hash
 from ..lab import Lab
 from ..protocol import check_wait_until, run_step
 from ..safety import MAX_STATE_AGE_S
@@ -18,8 +18,9 @@ from .transitions import (
     pause_protocol,
     resolve_frozen_step,
     resume_protocol,
-    start_approved_protocol,
 )
+
+POSITIONS_UPDATED_MSG = "示教点位已更新，请重新预演并批准"
 
 __all__ = [
     "abort_experiment",
@@ -29,6 +30,28 @@ __all__ = [
     "resume_protocol",
     "start_approved_protocol",
 ]
+
+
+def start_approved_protocol(
+    conn: sqlite3.Connection,
+    protocol_id: str,
+    *,
+    decided_by: str,
+    decided_at: float,
+    rehearsal: dict[str, Any],
+    positions_hash: str | None = None,
+) -> None:
+    """Transition `submitted -> approved -> running` and record `positions_hash`."""
+    runs.decide_protocol(
+        conn,
+        protocol_id,
+        status="approved",
+        decided_by=decided_by,
+        decided_at=decided_at,
+        rehearsal=rehearsal,
+        positions_hash=positions_hash,
+    )
+    runs.update_protocol_status(conn, protocol_id, "running")
 
 
 def _is_telemetry_stale(device: str, live_state: dict[str, Any]) -> bool:
@@ -188,6 +211,25 @@ def advance_running_protocol(backend: Backend, conn: sqlite3.Connection) -> str 
 
     if cur["status"] == "waiting":
         return _advance_waiting_step(backend, conn, proto, cur, len(steps), now)
+
+    if cur["kind"] == "skill" and cur["content"].get("skill") == "transfer":
+        if proto["positions_hash"] != positions_hash():
+            err = {"code": "POSITIONS_UPDATED", "message": POSITIONS_UPDATED_MSG}
+            res = {
+                "ok": False,
+                "status": "failed",
+                "result": {},
+                "error": err,
+                "operation_ids": [],
+                "elapsed_s": 0.0,
+            }
+            with conn:
+                runs.update_step(
+                    conn, proto_id, step_n, status="failed",
+                    started_at=now, finished_at=now, result=res,
+                )
+                mark_protocol_failed(conn, proto, at=now, step_n=step_n, error=err)
+            return "failed"
 
     with conn:
         runs.update_step(conn, proto_id, step_n, status="sent", started_at=now)

@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from ..devices import positions_hash
 from ..protocol import coerce_protocol, fingerprint, rehearse, render
 from ..store import inbox, runs
 from . import advance
@@ -240,6 +241,7 @@ def handle_approve(
         decided_by=model.decided_by,
         decided_at=now,
         rehearsal=rehearsal_res,
+        positions_hash=positions_hash(),
     )
     return {"ok": True, "protocol_id": proto["id"], "status": "running"}
 
