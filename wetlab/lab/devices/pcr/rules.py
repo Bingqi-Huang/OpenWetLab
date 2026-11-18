@@ -104,9 +104,11 @@ def check(action: str, params: dict, state: dict) -> str | None:
         fault_err = fault(state)
         if fault_err:
             return fault_err
-    if s.get("InterfaceLock") not in (None, 0):
+    # 0x0204: 1 = the touch screen holds the lock and 485 commands are ignored; 2 = the 485
+    # side (our gateway) holds it, which is the state we control the PCR in.
+    if s.get("InterfaceLock") == 1:
         lock_desc = s.get("InterfaceLockText", s.get("InterfaceLock"))
-        return f"PCR interface locked ({lock_desc})"
+        return f"PCR touch screen holds the interface lock ({lock_desc})"
 
     if action == "RunProgram":
         raw = params.get("Steps")

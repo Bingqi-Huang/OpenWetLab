@@ -102,6 +102,17 @@ def test_runprogram_follows_official_limits():
     assert not safety.check("pcr", "RunProgram", {"Steps": "{bad-json"}, island())[0]
 
 
+def test_interface_lock_2_means_the_485_side_holds_control():
+    """0x0204: 1 = touch screen holds the lock (485 commands ignored) -> block;
+    2 = locked by 485, i.e. the gateway side is in control (seen right after a gateway
+    restart on 2026-11-18) -> allow."""
+    held_by_485 = dict(PCR_READY, LidMotorState="Lifted", InterfaceLock=2,
+                       InterfaceLockText="被 485 锁定(可被串口屏解锁)")
+    assert safety.check("pcr", "OpenDoor", {}, island(pcr=held_by_485))[0]
+    held_by_screen = dict(PCR_READY, LidMotorState="Lifted", InterfaceLock=1)
+    assert not safety.check("pcr", "OpenDoor", {}, island(pcr=held_by_screen))[0]
+
+
 def test_touch_screen_lock_and_fault_block_actions():
     locked = dict(PCR_READY, LidMotorState="Lifted", InterfaceLock=1)
     assert not safety.check("pcr", "OpenDoor", {}, island(pcr=locked))[0]
