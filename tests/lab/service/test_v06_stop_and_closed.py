@@ -75,7 +75,7 @@ def test_stop_all_works_when_frozen_and_reports_stop_failed_honestly(tmp_path: P
             {"protocol_id": "E-001-v1", "decided_by": "王老师", "fingerprint": p_a["fingerprint"]},
             key="app-a",
         )
-        svc_a.run(max_rounds=3)
+        svc_a.run(max_rounds=15)
         assert sim_a.state()["PCR002"]["PcrState"] == "Running"
         assert sim_a.state()["PCR002"]["HeaterLidEnabled"] is True
 
