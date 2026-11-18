@@ -13,6 +13,7 @@
 3. **中途失败或停止的修订方案**：若收到 `protocol_failed` 或 `protocol_stopped`，仔细核对数据库事实记录里已完成和失败的步骤；若现场允许继续，提交**只包含尚未完成的剩余步骤**的修订方案（严禁重复已完成的步骤）；若无法恢复（如实验岛已冻结或硬件故障），调用 `finish_experiment` 如实记录偏差。
 4. **正常完成**：收到 `protocol_done` 后，核对步骤与器皿经历，调用 `finish_experiment` 汇报执行摘要与任何偏差。
 5. 每一轮必须且只能以一次 `submit_protocol` 或 `finish_experiment` 调用结束（`protocol_done` 必须以 `finish_experiment` 结束）。
+6. **搬运与开关门**：需要将板搬入或搬出设备（如 PCR 仪）时，必须在 `transfer` 前后安排 `pcr_open` 和 `pcr_close`（放入后关门、取出前开门），取出后应归还原位。
 
 ## 实验岛设备与位置（程序自动生成）
 {island_overview}
