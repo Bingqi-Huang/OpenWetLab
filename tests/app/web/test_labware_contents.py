@@ -8,7 +8,7 @@ from streamlit.testing.v1 import AppTest
 from wetlab.app.web import MAIN_PATH
 from wetlab.app.web.island_data import read_island
 from wetlab.lab.service.main import create_virtual_service
-from wetlab.lab.store import open_db, records
+from wetlab.lab.store import inbox, open_db, records
 
 
 def _html(at: AppTest) -> str:
@@ -98,5 +98,77 @@ def test_bench_reads_and_displays_labware_contents_from_sqlite(
         assert "96孔PCR板" in page_html
         assert "SynCom-1（A1, A2 · 20 µL）" in page_html
         assert "PCR预混液（25 µL · 冰上保存）" in page_html
+    finally:
+        conn.close()
+
+
+def test_place_labware_with_contents_table_enqueues_agreed_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#40(2): Filling the contents table on `place_labware` writes agreed `contents` payload."""
+    db_file = tmp_path / "place_contents.sqlite"
+    monkeypatch.delenv("WETLAB_MODE", raising=False)
+    monkeypatch.setenv("WETLAB_DB", str(db_file))
+    conn = open_db(db_file, mode="virtual")
+    try:
+        at = AppTest.from_file(str(MAIN_PATH), default_timeout=20).run()
+        assert not at.exception
+        assert len(at.data_editor(key="place_contents").value) == 1
+
+        # Row with wells/volume but missing `name` is rejected with a Chinese toast
+        at.text_input(key="place_id").set_value("LW-BAD")
+        at.selectbox(key="place_pos").set_value("rack:1-2")
+        at.session_state["place_contents"] = {
+            "edited_rows": {0: {"name": "   ", "wells": "B1", "volume_ul": 10.0}},
+            "added_rows": [],
+            "deleted_rows": [],
+        }
+        at.button(key="place_submit").click().run()
+        assert any("名称" in t.value for t in at.toast)
+        assert inbox.list_unhandled_commands(conn) == []
+
+        # Valid multi-row contents (specific wells + whole-plate blank wells)
+        at.text_input(key="place_id").set_value("LW-010")
+        at.text_input(key="place_type").set_value("96孔PCR板")
+        at.selectbox(key="place_pos").set_value("rack:1-2")
+        at.session_state["place_contents"] = {
+            "edited_rows": {0: {"name": "样品 X", "wells": "A1, A2", "volume_ul": 20.0}},
+            "added_rows": [{"name": "PCR master mix", "wells": "", "note": "4℃预冷"}],
+            "deleted_rows": [],
+        }
+        at.button(key="place_submit").click().run()
+        assert not at.exception
+
+        cmds = inbox.list_unhandled_commands(conn)
+        assert len(cmds) == 1
+        assert cmds[0]["kind"] == "place_labware"
+        assert cmds[0]["target_id"] == "LW-010"
+        assert cmds[0]["payload"] == {
+            "labware_id": "LW-010",
+            "type": "96孔PCR板",
+            "position": "rack:1-2",
+            "contents": [
+                {"name": "样品 X", "wells": ["A1", "A2"], "volume_ul": 20.0, "note": None},
+                {
+                    "name": "PCR master mix",
+                    "wells": None,
+                    "volume_ul": None,
+                    "note": "4℃预冷",
+                },
+            ],
+        }
+
+        # Next untouched submission does not leak previous contents rows
+        at.text_input(key="place_id").set_value("LW-011")
+        at.selectbox(key="place_pos").set_value("shaker")
+        at.button(key="place_submit").click().run()
+        cmds_after = inbox.list_unhandled_commands(conn)
+        assert len(cmds_after) == 2
+        assert cmds_after[1]["payload"] == {
+            "labware_id": "LW-011",
+            "type": "96孔PCR板",
+            "position": "shaker",
+        }
     finally:
         conn.close()
