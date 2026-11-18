@@ -27,6 +27,12 @@ def kind(device: str, action: str) -> str | None:
     return act.kind if act is not None else None
 
 
+def moves(device: str, action: str) -> bool:
+    """Return True when `(device, action)` can cause physical movement."""
+    act = _lookup_action(device, action)
+    return act.moves if act is not None else False
+
+
 def is_stop(device: str, action: str, params: dict | None = None) -> bool:
     """Return True when `(device, action, params)` is a stop or safe-shutdown command."""
     act = _lookup_action(device, action)

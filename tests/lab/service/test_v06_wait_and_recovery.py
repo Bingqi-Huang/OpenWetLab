@@ -174,8 +174,8 @@ def test_failed_step_clears_working_status_2_via_readonly_probe(tmp_path: Path) 
     conn = open_db(tmp_path / "ws2.sqlite", mode="virtual")
     fault = Fault(
         device="shaker",
-        action="StartShakeTimed",
-        at_call=1,
+        action="SetTargetSpeed",
+        nth=1,
         kind="fail",
         message="偶发通信错误",
     )
@@ -214,7 +214,7 @@ def test_failed_step_clears_working_status_2_via_readonly_probe(tmp_path: Path) 
         fail_idx = next(
             i
             for i, op in enumerate(shaker_ops)
-            if op["action"] == "StartShakeTimed" and op["status"] == "failed"
+            if op["action"] == "SetTargetSpeed" and op["status"] == "failed"
         )
         assert fail_idx + 1 < len(shaker_ops)
         recovery_op = shaker_ops[fail_idx + 1]
