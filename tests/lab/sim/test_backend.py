@@ -5,8 +5,9 @@ import json
 import pytest
 
 from wetlab.lab import safety
-from wetlab.lab.devices import CODE_TO_NAME, NAME_TO_CODE
+from wetlab.lab.devices import CODE_TO_NAME, ISLAND, NAME_TO_CODE
 from wetlab.lab.errors import DeviceFailed, NoResult
+from wetlab.lab.mqtt.codec import parse_uplink
 from wetlab.lab.sim import Fault, Scenario, SimBackend
 
 
@@ -147,3 +148,79 @@ def test_realtime_flag_controls_wall_clock_sleep(monkeypatch: pytest.MonkeyPatch
     paced.sleep(1.5)
     assert paced.now() - t1 == pytest.approx(1.5)
     assert slept == [1.5]
+
+
+def test_get_devices_default_matches_codec_shape_and_covers_island():
+    capture_line = None
+    with open("captures/20261118_survey_110949.jsonl", encoding="utf-8") as fh:
+        for line in fh:
+            obj = json.loads(line)
+            payload = obj.get("payload", "")
+            if "GetDevices" in payload and "rpc-result" in payload:
+                capture_line = obj
+                break
+    assert capture_line is not None
+    parsed = parse_uplink(capture_line["topic"], capture_line["payload"])
+
+    backend = SimBackend()
+    for dev in ISLAND:
+        res = backend.call(dev.spec.CODE, "GetDevices", {}, 15.0)
+        assert set(res.keys()) == set(parsed.data.keys()) == {"deviceData"}
+        items = res["deviceData"]
+        assert isinstance(items, list)
+        assert len(items) == len(ISLAND)
+        codes = {}
+        for entry in items:
+            assert isinstance(entry["Id"], int)
+            assert isinstance(entry["Name"], str)
+            assert entry["IsEnabled"] is True
+            cfg_map = {c["Key"]: c["Value"] for c in entry["Configs"]}
+            codes[cfg_map["Code"]] = entry
+        assert set(codes.keys()) == {d.spec.CODE for d in ISLAND}
+
+
+def test_get_devices_scenario_override_for_missing_or_disabled():
+    custom = [
+        {
+            "Id": 46,
+            "Name": "PCR仪",
+            "IsEnabled": False,
+            "Configs": [{"Key": "Code", "Value": "PCR002"}],
+        }
+    ]
+    backend = SimBackend(Scenario(gateway_devices=custom))
+    res = backend.call("PCR002", "GetDevices", {}, 15.0)
+    assert res == {"deviceData": custom}
+    res["deviceData"][0]["IsEnabled"] = True
+    assert backend.call("T002001", "GetDevices", {}, 15.0)["deviceData"][0]["IsEnabled"] is False
+
+    empty_backend = SimBackend(Scenario(gateway_devices=[]))
+    assert empty_backend.call("PCR002", "GetDevices", {}, 15.0) == {"deviceData": []}
+
+
+def test_fault_injection_failed_after_act_executes_motion_then_raises():
+    scen = Scenario(
+        faults=[
+            Fault(
+                device="turntable",
+                action="SingleLoop",
+                nth=1,
+                kind="failed_after_act",
+                message="转向命令未收到电机应答",
+            )
+        ]
+    )
+    backend = SimBackend(scen)
+    assert backend.state()["STEERING_PLATFORM001"]["Angles"] == "0"
+
+    with pytest.raises(DeviceFailed, match="转向命令未收到电机应答"):
+        backend.call("STEERING_PLATFORM001", "SingleLoop", {"Angle": 90}, 15.0)
+
+    st = backend.state()["STEERING_PLATFORM001"]
+    assert st["Angles"] == "90"
+    assert st["WorkingStatus"] == 2
+
+    backend.call("STEERING_PLATFORM001", "SingleLoop", {"Angle": 0}, 15.0)
+    st_after = backend.state()["STEERING_PLATFORM001"]
+    assert st_after["Angles"] == "0"
+    assert st_after["WorkingStatus"] == 0
