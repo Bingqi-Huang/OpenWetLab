@@ -1,6 +1,7 @@
 """Tests for PcrSim behaviors, ramp duration, and physical accident detection."""
 
 import json
+import math
 import time
 
 import pytest
@@ -14,6 +15,7 @@ def test_open_and_close_door_timing_and_moving_state():
     backend = SimBackend()
     pcr_sim = backend.world.device("pcr")
     backend.call("PCR002", "SetLidMotor", {"Action": "Lift"}, 20)
+    backend.sleep(5.0)
 
     t0 = backend.now()
     proc = backend.world.env.process(pcr_sim.OpenDoor({}))
@@ -66,24 +68,49 @@ def test_set_lid_motor_defaults_to_seal():
     )
     t0 = backend.now()
     backend.call("PCR002", "SetLidMotor", {}, 20)
-    assert pytest.approx(backend.now() - t0, abs=0.01) == 8.0
+    assert pytest.approx(backend.now() - t0, abs=0.01) == 0.2
+    assert backend.state()["PCR002"]["LidMotorState"] == "Sealing"
+    backend.sleep(5.0)
     assert backend.state()["PCR002"]["LidMotorState"] == "Lifted"
     assert backend.world.history["LW-001"][-1]["what"] == "sealed"
+
+
+def test_set_lid_motor_returns_immediately_and_moves_in_background():
+    backend = SimBackend(Scenario(labware={"LW-001": "pcr"}))
+    assert backend.state()["PCR002"]["LidMotorState"] == "Pressed"
+
+    t0 = backend.now()
+    backend.call("PCR002", "SetLidMotor", {"Action": "Lift"}, 20)
+    assert pytest.approx(backend.now() - t0, abs=0.01) == 0.2
+    assert backend.state()["PCR002"]["LidMotorState"] == "Moving"
+
+    backend.sleep(3.0)
+    assert backend.state()["PCR002"]["LidMotorState"] == "Moving"
+
+    backend.sleep(2.0)
+    assert backend.state()["PCR002"]["LidMotorState"] == "Lifted"
+
+    t1 = backend.now()
+    backend.call("PCR002", "SetLidMotor", {"Action": "Press"}, 20)
+    assert pytest.approx(backend.now() - t1, abs=0.01) == 0.2
+    assert backend.state()["PCR002"]["LidMotorState"] == "Moving"
+    backend.sleep(5.0)
+    assert backend.state()["PCR002"]["LidMotorState"] == "Pressed"
 
 
 def test_run_program_returns_immediately_counts_down_and_finishes_idle():
     backend = SimBackend(Scenario(labware={"LW-001": "pcr"}))
     steps = [{"ZoneATarget": 37, "ZoneCTarget": 37, "HoldSeconds": 30, "Cycles": 1}]
     expected_total = program_seconds(steps)
-    assert expected_total > 30  # includes ramp from 25 C to 37 C
+    assert expected_total > 50  # includes 20s prep + ramp from 25 C to 37 C + 30s hold
 
     t0 = backend.now()
     backend.call("PCR002", "RunProgram", {"Steps": json.dumps(steps)}, 15)
-    assert pytest.approx(backend.now() - t0, abs=0.01) == 1.0
+    assert pytest.approx(backend.now() - t0, abs=0.01) == 0.25
     st = backend.state()["PCR002"]
     assert st["PcrState"] == "Running"
     rem1 = st["PcrRemainingSeconds"]
-    assert 0 < rem1 < expected_total
+    assert 0 < rem1 <= expected_total
 
     backend.sleep(10.0)
     rem2 = backend.state()["PCR002"]["PcrRemainingSeconds"]
@@ -94,6 +121,59 @@ def test_run_program_returns_immediately_counts_down_and_finishes_idle():
     assert st_done["PcrState"] == "Idle"
     assert st_done["PcrRemainingSeconds"] == 0
     assert backend.world.history["LW-001"][-1]["outcome"] == "completed"
+
+
+def test_program_seconds_calibrated_prep_heating_cooling_and_hold():
+    steps = [
+        {"ZoneATarget": 95, "ZoneCTarget": 95, "HoldSeconds": 10, "Cycles": 1},
+        {"ZoneATarget": 4, "ZoneCTarget": 4, "HoldSeconds": 30, "Cycles": 1},
+    ]
+    expected = round(20.0 + (95.0 - 25.0) / 2.0 + 10.0 + math.log(95.0 / 4.0) / 0.029 + 30.0)
+    assert program_seconds(steps) == expected == 204
+
+    backend = SimBackend(Scenario(labware={"LW-001": "pcr"}))
+    t0 = backend.now()
+    backend.call("PCR002", "RunProgram", {"Steps": json.dumps(steps)}, 15)
+    backend.sleep(expected - 1.0)
+    assert backend.state()["PCR002"]["PcrState"] == "Running"
+    backend.sleep(2.0)
+    assert backend.state()["PCR002"]["PcrState"] == "Idle"
+    assert backend.now() - t0 >= expected
+
+
+def test_program_lid_auto_control_when_enabled_vs_disabled():
+    # 1. Lid enabled before RunProgram -> off for 10s in prep, back on, then off at <= 4 C step
+    b_on = SimBackend(Scenario(labware={"LW-001": "pcr"}))
+    b_on.call("PCR002", "SetHeater", {"Zone": "Lid", "Enabled": True, "TargetCelsius": 105.0}, 15)
+    steps = [
+        {"ZoneATarget": 95, "ZoneCTarget": 95, "HoldSeconds": 10, "Cycles": 1},
+        {"ZoneATarget": 4, "ZoneCTarget": 4, "HoldSeconds": 30, "Cycles": 1},
+    ]
+    b_on.call("PCR002", "RunProgram", {"Steps": json.dumps(steps)}, 15)
+    assert b_on.state()["PCR002"]["HeaterLidEnabled"] is True
+
+    b_on.sleep(5.0)  # inside the 10s initial lid-off window
+    assert b_on.state()["PCR002"]["HeaterLidEnabled"] is False
+
+    b_on.sleep(10.0)  # after 10s off window, lid turns back on
+    assert b_on.state()["PCR002"]["HeaterLidEnabled"] is True
+
+    b_on.sleep(55.0)  # past 20s prep + 45s step 1 -> now inside 4 C step 2
+    assert b_on.state()["PCR002"]["PcrState"] == "Running"
+    assert b_on.state()["PCR002"]["HeaterLidEnabled"] is False
+
+    while b_on.state()["PCR002"]["PcrState"] == "Running":
+        b_on.sleep(5.0)
+    assert b_on.state()["PCR002"]["HeaterLidEnabled"] is False
+
+    # 2. Lid disabled before RunProgram -> stays False throughout
+    b_off = SimBackend(Scenario(labware={"LW-001": "pcr"}))
+    steps_37 = [{"ZoneATarget": 37, "ZoneCTarget": 37, "HoldSeconds": 20, "Cycles": 1}]
+    b_off.call("PCR002", "RunProgram", {"Steps": json.dumps(steps_37)}, 15)
+    for _ in range(10):
+        assert b_off.state()["PCR002"]["HeaterLidEnabled"] is False
+        b_off.sleep(5.0)
+    assert b_off.state()["PCR002"]["HeaterLidEnabled"] is False
 
 
 def test_stop_run_interrupts_running_program_to_idle():
@@ -122,7 +202,8 @@ def test_list_files_returns_eight_monad_programs():
 def test_heater_plate_capacity_and_tube_mode_settings():
     backend = SimBackend(Scenario(labware={"LW-001": "pcr"}))
     backend.call("PCR002", "SetTubeMode", {"Mode": "Block"}, 15)
-    backend.call("PCR002", "SetPlateCapacity", {"Microliters": 50}, 15)
+    res_cap = backend.call("PCR002", "SetPlateCapacity", {"Microliters": 50}, 15)
+    assert res_cap["microliters"] == 50
     backend.call(
         "PCR002",
         "SetHeater",
@@ -132,7 +213,7 @@ def test_heater_plate_capacity_and_tube_mode_settings():
     backend.sleep(60.0)
     st = backend.state()["PCR002"]
     assert st["TubeMode"] == "Block"
-    assert st["PlateCapacity"] == 50
+    assert st["PlateCapacity"] == 0
     assert st["HeaterLidEnabled"] is True
     assert st["HeaterLidTarget"] == 105.0
     assert st["LidTemperature"] == 105.0
@@ -163,13 +244,18 @@ def test_two_hour_pcr_program_completes_under_one_second_with_ramp_time():
 
 
 def test_accident_heating_started_without_closed_door_or_pressed_lid():
-    open_door = SimBackend(Scenario(devices={"pcr": {"DoorState": "Open", "LidMotorState": "Lifted"}}))
+    open_door = SimBackend(
+        Scenario(devices={"pcr": {"DoorState": "Open", "LidMotorState": "Lifted"}})
+    )
     steps = json.dumps([{"ZoneATarget": 37, "ZoneCTarget": 37, "HoldSeconds": 10}])
     open_door.call("PCR002", "RunProgram", {"Steps": steps}, 15)
     assert len(open_door.world.accidents) == 1
 
-    unpressed = SimBackend(Scenario(devices={"pcr": {"DoorState": "Closed", "LidMotorState": "Lifted"}}))
-    unpressed.call("PCR002", "SetHeater", {"Zone": "Lid", "Enabled": True, "TargetCelsius": 105}, 15)
+    unpressed = SimBackend(
+        Scenario(devices={"pcr": {"DoorState": "Closed", "LidMotorState": "Lifted"}})
+    )
+    lid_params = {"Zone": "Lid", "Enabled": True, "TargetCelsius": 105}
+    unpressed.call("PCR002", "SetHeater", lid_params, 15)
     assert len(unpressed.world.accidents) == 1
 
 

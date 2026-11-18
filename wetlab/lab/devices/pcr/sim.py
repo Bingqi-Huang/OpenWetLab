@@ -1,6 +1,7 @@
 """Virtual SimPy model and referee checks for the Arhat-auto 96 PCR cycler."""
 
 import json
+import math
 
 import simpy
 
@@ -9,51 +10,68 @@ from ..base import SimDevice
 
 AMBIENT_TEMP_C = 25.0
 LID_AMBIENT_C = 27.0
-NOMINAL_RAMP_C_PER_S = 3.0
+HEAT_RAMP_C_PER_S = 2.0
+COOL_DECAY_PER_S = 0.029
+PREP_SECONDS = 20.0
 LID_RAMP_C_PER_S = 1.5
+LID_MOVE_SECONDS = 5.0
+
+_INIT_PROPS = dict(
+    DoorState="Closed", LidMotorState="Lifted", PcrState="Idle", FaultText="无故障",
+    FaultCode=0, InterfaceLock=0, PcrTotalSeconds=0, PcrRemainingSeconds=0,
+    LidTemperature=LID_AMBIENT_C, HeaterLidEnabled=False, HeaterLidTarget=105.0,
+    TubeMode="Block", PlateCapacity=0, WorkingStatus=0,
+)
 
 
-def program_seconds(steps: list[dict]) -> int:
-    """Compute total PCR program run time in seconds, including heating/cooling ramps."""
-    total = 0.0
-    temp = AMBIENT_TEMP_C
-    i = 0
+def _ramp_seconds(t_from: float, t_to: float, req_rate: float) -> float:
+    if t_to > t_from:
+        rate = min(HEAT_RAMP_C_PER_S, req_rate) if req_rate > 0 else HEAT_RAMP_C_PER_S
+        return (t_to - t_from) / rate
+    if t_to < t_from:
+        cool_s = math.log(t_from / t_to) / COOL_DECAY_PER_S
+        return max(cool_s, (t_from - t_to) / req_rate) if req_rate > 0 else cool_s
+    return 0.0
+
+
+def _build_phases(steps: list[dict], *, lid_on: bool) -> list[tuple[float, bool | None]]:
+    init_lid = [(1.0, True), (10.0, False), (9.0, True)]
+    phases: list[tuple[float, bool | None]] = init_lid if lid_on else [(PREP_SECONDS, False)]
+    enclosing = {
+        idx: end_idx
+        for end_idx, st in enumerate(steps)
+        if int(st.get("NextStep", 0)) and int(st.get("Cycles", 1)) > 1
+        for idx in range(int(st["NextStep"]) - 1, end_idx + 1)
+    }
     loop_iter: dict[int, int] = {}
-    enclosing: dict[int, int] = {}
-    for end_idx, st in enumerate(steps):
-        nxt = int(st.get("NextStep", 0))
-        cycles = int(st.get("Cycles", 1))
-        if nxt and cycles > 1:
-            for idx in range(nxt - 1, end_idx + 1):
-                enclosing[idx] = end_idx
-
+    temp = AMBIENT_TEMP_C
+    lid_active = lid_on
+    i = 0
     while i < len(steps):
         st = steps[i]
         end_idx = enclosing.get(i)
         k = loop_iter.get(end_idx, 0) if end_idx is not None else 0
-        target = float(st["ZoneATarget"]) + float(st.get("RampPerCycleCelsius", 0)) * k
-        hold = int(st["HoldSeconds"]) + int(st.get("RampPerCycleSeconds", 0)) * k
         req_rate = float(st.get("RampRate", 0))
-        rate = min(NOMINAL_RAMP_C_PER_S, req_rate) if req_rate > 0 else NOMINAL_RAMP_C_PER_S
-        total += abs(target - temp) / rate + hold
-        temp = target
-
         nxt = int(st.get("NextStep", 0))
         cycles = int(st.get("Cycles", 1))
-        if nxt and cycles > 1:
-            if k + 1 < cycles:
-                loop_iter[i] = k + 1
-                i = nxt - 1
-                continue
-            loop_iter.pop(i, None)
-        elif cycles > 1:
-            for rep in range(1, cycles):
-                t_rep = float(st["ZoneATarget"]) + float(st.get("RampPerCycleCelsius", 0)) * rep
-                h_rep = int(st["HoldSeconds"]) + int(st.get("RampPerCycleSeconds", 0)) * rep
-                total += abs(t_rep - temp) / rate + h_rep
-                temp = t_rep
+        for rep in ([k] if (nxt and cycles > 1) else range(max(1, cycles))):
+            target = float(st["ZoneATarget"]) + float(st.get("RampPerCycleCelsius", 0)) * rep
+            hold = int(st["HoldSeconds"]) + int(st.get("RampPerCycleSeconds", 0)) * rep
+            lid_active = False if target <= 4.0 else lid_active
+            phases.append((_ramp_seconds(temp, target, req_rate) + hold, lid_active))
+            temp = target
+        if nxt and cycles > 1 and k + 1 < cycles:
+            loop_iter[i] = k + 1
+            i = nxt - 1
+            continue
+        loop_iter.pop(i, None)
         i += 1
-    return max(1, round(total))
+    return phases
+
+
+def program_seconds(steps: list[dict]) -> int:
+    """Compute total PCR program run time in seconds (20s prep + ramps + holds)."""
+    return max(1, round(sum(dur for dur, _ in _build_phases(steps, lid_on=False))))
 
 
 class PcrSim(SimDevice):
@@ -63,70 +81,60 @@ class PcrSim(SimDevice):
     FILE_SECONDS = 5400
 
     def __init__(self, world) -> None:
-        super().__init__(
-            world,
-            {
-                "DoorState": "Closed",
-                "LidMotorState": "Lifted",
-                "PcrState": "Idle",
-                "FaultText": "无故障",
-                "FaultCode": 0,
-                "InterfaceLock": 0,
-                "PcrTotalSeconds": 0,
-                "PcrRemainingSeconds": 0,
-                "LidTemperature": LID_AMBIENT_C,
-                "HeaterLidEnabled": False,
-                "HeaterLidTarget": 105.0,
-                "TubeMode": "Block",
-                "PlateCapacity": 0,
-                "WorkingStatus": 0,
-            },
-        )
+        super().__init__(world, dict(_INIT_PROPS))
         self._run_proc: simpy.Process | None = None
+        self._lid_proc: simpy.Process | None = None
         self._ends_at: float = 0.0
-        self._paused_remaining: int = 0
+        self._paused_phases: list[tuple[float, bool | None]] = []
         self._paused_what: dict = {}
         self._lid_updated_at: float = 0.0
 
     def start_from_props(self) -> None:
         self._lid_updated_at = float(self.env.now)
+        self.props["PlateCapacity"] = 0
         rem = int(self.props.get("PcrRemainingSeconds", 0))
         if self.props.get("PcrState") == "Running" and rem > 0:
-            self._run_proc = self.env.process(
-                self._program(rem, {"resumed": True}, check_start_safety=False)
-            )
+            self._start([(float(rem), None)], {"resumed": True}, check_safety=False)
 
     def refresh(self) -> None:
+        self.props["PlateCapacity"] = 0
         now = float(self.env.now)
         dt = now - self._lid_updated_at
         if dt > 0:
             cur = float(self.props["LidTemperature"])
-            lid_on = bool(self.props["HeaterLidEnabled"])
-            goal = float(self.props["HeaterLidTarget"]) if lid_on else LID_AMBIENT_C
+            goal = float(self.props["HeaterLidTarget"]) if self.props["HeaterLidEnabled"] else 27.0
             step = LID_RAMP_C_PER_S * dt
-            if abs(goal - cur) <= step:
-                self.props["LidTemperature"] = round(goal, 2)
-            else:
-                delta = step if goal > cur else -step
-                self.props["LidTemperature"] = round(cur + delta, 2)
+            self.props["LidTemperature"] = round(cur + max(-step, min(step, goal - cur)), 2)
             self._lid_updated_at = now
         if self.props["PcrState"] == "Running":
             self.props["PcrRemainingSeconds"] = max(0, round(self._ends_at - now))
 
     def ready_for_arm_truth(self) -> str | None:
-        if (
-            self.props["DoorState"] != "Open"
-            or self.props["LidMotorState"] != "Lifted"
-            or self.props["PcrState"] != "Idle"
-        ):
-            return (
-                f"PCR 未处于可交接状态: DoorState={self.props['DoorState']}, "
-                f"LidMotorState={self.props['LidMotorState']}, PcrState={self.props['PcrState']}"
-            )
+        p = self.props
+        if p["DoorState"] != "Open" or p["LidMotorState"] != "Lifted" or p["PcrState"] != "Idle":
+            msg = f"DoorState={p['DoorState']}, LidMotorState={p['LidMotorState']}"
+            return f"PCR 未处于可交接状态: {msg}, PcrState={p['PcrState']}"
         return None
 
+    def _check_closed_pressed(self) -> None:
+        if self.props["DoorState"] != "Closed" or self.props["LidMotorState"] != "Pressed":
+            self.world.accident("PCR 加热开始时门没关或热盖没压下")
+
+    def _interrupt_lid(self) -> None:
+        if self._lid_proc is not None and self._lid_proc.is_alive:
+            self._lid_proc.interrupt("replaced")
+
+    def _move_lid(self, act: str, seconds: float):
+        self.props["LidMotorState"] = "Sealing" if act == "Seal" else "Moving"
+        try:
+            yield self.env.timeout(seconds)
+        except simpy.Interrupt:
+            return
+        if act == "Seal":
+            self.world.record("pcr", "sealed")
+        self.props["LidMotorState"] = "Pressed" if act == "Press" else "Lifted"
+
     def OpenDoor(self, params: dict):
-        _ = params
         if self.props["LidMotorState"] != "Lifted":
             self.world.accident("PCR 热盖没抬起时开门")
         if self.props["PcrState"] == "Running":
@@ -141,22 +149,18 @@ class PcrSim(SimDevice):
         self.props["DoorState"] = "Moving"
         yield self.env.timeout(4.1)
         self.props["DoorState"] = "Closed"
-        should_press = (
-            self.world.plate_at("pcr") is not None and self.props["LidMotorState"] != "Pressed"
-        )
-        pressing = self.env.process(self._auto_press()) if should_press else None
-        if wait_lid:
-            if pressing is not None:
-                yield pressing
-            elif self.props["LidMotorState"] != "Pressed":
-                yield self.env.timeout(20.0)
-                raise DeviceFailed("关门后等待热盖下压超时(20000ms)")
+        pressing = None
+        if self.world.plate_at("pcr") is not None and self.props["LidMotorState"] != "Pressed":
+            self._interrupt_lid()
+            self.props["LidMotorState"] = "Moving"
+            pressing = self.env.process(self._move_lid("Press", 6.0))
+            self._lid_proc = pressing
+        if wait_lid and pressing is not None:
+            yield pressing
+        elif wait_lid and self.props["LidMotorState"] != "Pressed":
+            yield self.env.timeout(20.0)
+            raise DeviceFailed("关门后等待热盖下压超时(20000ms)")
         return {"success": True, "doorState": "Closed"}
-
-    def _auto_press(self):
-        self.props["LidMotorState"] = "Moving"
-        yield self.env.timeout(6.0)
-        self.props["LidMotorState"] = "Pressed"
 
     def SetLidMotor(self, params: dict):
         act = params.get("Action", "Seal")
@@ -166,46 +170,41 @@ class PcrSim(SimDevice):
             self.world.accident("PCR 程序运行中抬热盖")
         if act in ("Press", "Seal") and self.props["DoorState"] != "Closed":
             self.world.accident("PCR 门开着压热盖")
+        self._interrupt_lid()
         self.props["LidMotorState"] = "Sealing" if act == "Seal" else "Moving"
-        yield self.env.timeout(8.0)
-        if act == "Seal":
-            self.world.record("pcr", "sealed")
-        self.props["LidMotorState"] = "Pressed" if act == "Press" else "Lifted"
+        self._lid_proc = self.env.process(self._move_lid(act, LID_MOVE_SECONDS))
+        yield self.env.timeout(0.2)
         return {"success": True, "action": act, "lidMotorState": self.props["LidMotorState"]}
 
     def SetHeater(self, params: dict):
         self.refresh()
         zone = params.get("Zone", "Lid")
         enabled = bool(params.get("Enabled", True))
-        target = params.get("TargetCelsius")
-        if enabled and (
-            self.props["DoorState"] != "Closed" or self.props["LidMotorState"] != "Pressed"
-        ):
-            self.world.accident("PCR 加热开始时门没关或热盖没压下")
+        if enabled:
+            self._check_closed_pressed()
         yield self.env.timeout(0.2)
         if zone == "Lid":
             self.props["HeaterLidEnabled"] = enabled
-            if target is not None:
-                self.props["HeaterLidTarget"] = float(target)
+            if params.get("TargetCelsius") is not None:
+                self.props["HeaterLidTarget"] = float(params["TargetCelsius"])
         self._lid_updated_at = float(self.env.now)
         return {"success": True, "zone": zone, "enabled": enabled}
 
     def SetPlateCapacity(self, params: dict):
         ul = int(params.get("Microliters", 100))
-        yield self.env.timeout(0.2)
-        self.props["PlateCapacity"] = ul
-        return {"success": True, "microliters": ul}
+        yield self.env.timeout(0.1)
+        self.props["PlateCapacity"] = 0
+        return {"success": True, "plateCapacity": ul, "microliters": ul}
 
     def SetTubeMode(self, params: dict):
         mode = params.get("Mode", "Block")
         if mode not in ("Block", "Tube"):
             raise DeviceFailed(f"未知模式: {mode}")
-        yield self.env.timeout(0.2)
+        yield self.env.timeout(0.1)
         self.props["TubeMode"] = mode
         return {"success": True, "mode": mode}
 
     def ListFiles(self, params: dict):
-        _ = params
         yield self.env.timeout(0.5)
         files = [
             {"index": idx, "folder": "Monad", "file": name, "fullName": f"Monad/{name}"}
@@ -217,77 +216,79 @@ class PcrSim(SimDevice):
         if self._run_proc is not None and self._run_proc.is_alive:
             self._run_proc.interrupt(cause)
 
+    def _start(self, phases: list[tuple[float, bool | None]], what: dict, *, check_safety=True):
+        self._interrupt_active("replaced")
+        self._run_proc = self.env.process(self._program(phases, what, check_safety=check_safety))
+
     def RunProgram(self, params: dict):
         raw = params["Steps"]
         steps = json.loads(raw) if isinstance(raw, str) else raw
-        self._interrupt_active("replaced")
-        seconds = program_seconds(steps)
-        self._run_proc = self.env.process(self._program(seconds, {"steps": steps}))
-        yield self.env.timeout(1.0)
+        phases = _build_phases(steps, lid_on=bool(self.props["HeaterLidEnabled"]))
+        seconds = max(1, round(sum(dur for dur, _ in phases)))
+        self._start(phases, {"steps": steps})
+        yield self.env.timeout(0.25)
         self.refresh()
         return {"success": True, "totalSeconds": seconds}
 
     def RunFile(self, params: dict):
-        folder = params.get("Folder", "Monad")
-        file_name = params.get("File", "")
-        if folder != "Monad" or file_name not in self.FILES:
-            raise DeviceFailed(f"文件不存在: {folder}/{file_name}")
-        self._interrupt_active("replaced")
-        self._run_proc = self.env.process(
-            self._program(self.FILE_SECONDS, {"file": f"{folder}/{file_name}"})
-        )
+        full = f"{params.get('Folder', 'Monad')}/{params.get('File', '')}"
+        if params.get("Folder", "Monad") != "Monad" or params.get("File", "") not in self.FILES:
+            raise DeviceFailed(f"文件不存在: {full}")
+        self._start([(float(self.FILE_SECONDS), None)], {"file": full})
+        assert self._run_proc is not None
         yield self._run_proc
-        return {"success": True, "file": f"{folder}/{file_name}"}
+        return {"success": True, "file": full}
 
     def PauseRun(self, params: dict):
-        _ = params
         if self.props["PcrState"] != "Running":
             raise DeviceFailed("空闲态没有运行中的程序,无法暂停")
         self.refresh()
-        self._paused_remaining = max(1, int(self.props["PcrRemainingSeconds"]))
         self._interrupt_active("paused")
-        yield self.env.timeout(0.5)
+        yield self.env.timeout(0.37)
         return {"success": True, "pcrState": "Paused"}
 
     def StartRun(self, params: dict):
-        _ = params
-        if self.props["PcrState"] != "Paused" or self._paused_remaining <= 0:
+        if self.props["PcrState"] != "Paused" or not self._paused_phases:
             raise DeviceFailed("空闲态没有可继续的程序")
-        rem = self._paused_remaining
-        what = self._paused_what
-        self._paused_remaining = 0
-        self._run_proc = self.env.process(self._program(rem, what))
-        yield self.env.timeout(0.5)
+        phases = self._paused_phases
+        self._paused_phases = []
+        self._start(phases, self._paused_what, check_safety=False)
+        yield self.env.timeout(0.36)
         self.refresh()
         return {"success": True, "pcrState": "Running"}
 
     def StopRun(self, params: dict):
-        _ = params
         self._interrupt_active("stopped")
-        self._paused_remaining = 0
+        self._paused_phases = []
         self.props.update(PcrState="Idle", PcrRemainingSeconds=0)
-        yield self.env.timeout(1.0)
+        yield self.env.timeout(0.53)
         return {"success": True, "pcrState": "Idle"}
 
-    def _program(self, seconds: int, what: dict, *, check_start_safety: bool = True):
-        if check_start_safety and (
-            self.props["DoorState"] != "Closed" or self.props["LidMotorState"] != "Pressed"
-        ):
-            self.world.accident("PCR 加热开始时门没关或热盖没压下")
+    def _program(self, phases: list[tuple[float, bool | None]], what: dict, *, check_safety=True):
+        if check_safety:
+            self._check_closed_pressed()
+        total_s = sum(dur for dur, _ in phases)
+        tot = max(1, round(total_s))
         self._paused_what = what
-        self.props.update(
-            PcrState="Running",
-            PcrTotalSeconds=seconds,
-            PcrRemainingSeconds=seconds,
-        )
+        self.props.update(PcrState="Running", PcrTotalSeconds=tot, PcrRemainingSeconds=tot)
         started = float(self.env.now)
-        self._ends_at = started + seconds
+        self._ends_at = started + total_s
+        idx = 0
+        phase_started = started
         try:
-            yield self.env.timeout(seconds)
+            for idx, (dur, lid_val) in enumerate(phases):
+                if lid_val is not None:
+                    self.refresh()
+                    self.props["HeaterLidEnabled"] = lid_val
+                phase_started = float(self.env.now)
+                if dur > 0:
+                    yield self.env.timeout(dur)
             outcome = "completed"
         except simpy.Interrupt as intr:
             outcome = str(intr.cause)
             if outcome == "paused":
+                rem_cur = max(0.0, phases[idx][0] - (float(self.env.now) - phase_started))
+                self._paused_phases = [(rem_cur, phases[idx][1]), *phases[idx + 1 :]]
                 self.props["PcrState"] = "Paused"
                 return
         self.props.update(PcrState="Idle", PcrRemainingSeconds=0)

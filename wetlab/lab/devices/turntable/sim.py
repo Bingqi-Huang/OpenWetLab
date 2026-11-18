@@ -2,9 +2,11 @@
 
 from ..base import SimDevice
 
+ROTATE_SECONDS = 1.2
+
 
 class TurntableSim(SimDevice):
-    """SimPy model of STEERING_PLATFORM001."""
+    """SimPy model of STEERING_PLATFORM001 calibrated against GW_001 captures."""
 
     def __init__(self, world) -> None:
         super().__init__(
@@ -25,14 +27,15 @@ class TurntableSim(SimDevice):
         if self.world.device("arm").props["RobotMode"] == "运行中":
             self.world.accident("机械臂运动时转向台旋转")
         angle = params["Angle"]
-        text = str(int(angle)) if isinstance(angle, float) and angle.is_integer() else str(angle)
-        yield self.env.timeout(3.0)
+        norm = int(angle) if isinstance(angle, float) and angle.is_integer() else angle
+        text = str(norm)
+        yield self.env.timeout(ROTATE_SECONDS)
         self.props["Angles"] = text
-        return {"ok": True, "Angles": text}
+        return {"success": True, "ok": True, "angle": norm, "Angles": text}
 
     def Stop(self, params: dict):
         yield self.env.timeout(0.2)
-        return {"ok": True}
+        return {"success": True, "ok": True}
 
 
 SIM_CLASS = TurntableSim

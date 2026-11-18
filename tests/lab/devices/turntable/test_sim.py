@@ -1,18 +1,47 @@
-"""Tests for TurntableSim string Angles behavior and moving-arm collision detection."""
+"""Tests for TurntableSim string Angles, 1-2s timing, fault-after-act, and arm collision."""
 
-from wetlab.lab.sim import Scenario, SimBackend
+import pytest
+
+from wetlab.lab.errors import DeviceFailed
+from wetlab.lab.sim import Fault, Scenario, SimBackend
 
 
-def test_single_loop_sets_angles_string():
+def test_single_loop_sets_angles_string_and_takes_about_1_to_2_seconds():
     backend = SimBackend()
     assert backend.state()["STEERING_PLATFORM001"]["Angles"] == "0"
     assert "Angle" not in backend.state()["STEERING_PLATFORM001"]
 
-    backend.call("STEERING_PLATFORM001", "SingleLoop", {"Angle": 90}, 15)
+    t0 = backend.now()
+    res = backend.call("STEERING_PLATFORM001", "SingleLoop", {"Angle": 90}, 15)
+    elapsed = backend.now() - t0
+    assert 1.0 <= elapsed <= 2.0
+    assert res["success"] is True
     st = backend.state()["STEERING_PLATFORM001"]
     assert st["Angles"] == "90"
     assert isinstance(st["Angles"], str)
     assert backend.world.accidents == []
+
+
+def test_single_loop_injected_failed_after_act_rotates_to_target_then_raises():
+    scen = Scenario(
+        faults=[
+            Fault(
+                device="turntable",
+                action="SingleLoop",
+                nth=1,
+                kind="failed_after_act",
+                message="转向命令未收到电机应答（串口无响应）",
+            )
+        ]
+    )
+    backend = SimBackend(scen)
+    t0 = backend.now()
+    with pytest.raises(DeviceFailed, match="未收到电机应答"):
+        backend.call("STEERING_PLATFORM001", "SingleLoop", {"Angle": 90}, 15)
+    assert 1.0 <= (backend.now() - t0) <= 2.0
+    st = backend.state()["STEERING_PLATFORM001"]
+    assert st["Angles"] == "90"
+    assert st["WorkingStatus"] == 2
 
 
 def test_accident_turntable_rotates_while_arm_moving():
