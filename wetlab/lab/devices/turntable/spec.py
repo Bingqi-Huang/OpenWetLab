@@ -7,7 +7,7 @@ LABEL = "转向台"
 CODE = "STEERING_PLATFORM001"
 
 ACTIONS = {
-    "SingleLoop": Action(ACT),
+    "SingleLoop": Action(ACT, moves=True),
     "Stop": Action(ACT, stop=True),
 }
 
@@ -19,7 +19,14 @@ PROPS = {
 }
 
 POSITIONS = {
-    "turntable": Position(label="转向台", point="2118251893923930114", posture=0),
+    "turntable": Position(
+        label="转向台",
+        device="turntable",
+        point="2118251893923930114",
+        posture=0,
+        index="1-1",
+        holds_labware=False,
+    ),
 }
 
 

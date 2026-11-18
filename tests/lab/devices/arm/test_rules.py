@@ -19,6 +19,8 @@ def test_arm_spec():
     assert spec.HOME.label == "机械臂原位"
     assert spec.ACTIONS["MovMulti"].result_topic == "motion/response"
     assert spec.ACTIONS["MovMulti"].seconds == 60
+    moving = {name for name, act in spec.ACTIONS.items() if act.moves}
+    assert moving == {"MovMulti"}
 
 
 def test_arm_must_be_idle_normal_and_gripper_connected():

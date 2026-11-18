@@ -17,6 +17,7 @@ class Action:
     seconds: int | None = None
     until_done: bool = False
     stop: bool = False
+    moves: bool = False
     result_topic: str = "device"
 
     def __post_init__(self) -> None:
@@ -29,8 +30,11 @@ class Position:
     """A named taught point on the island."""
 
     label: str
+    device: str
     point: str
-    posture: int = 0
+    posture: int
+    index: str
+    holds_labware: bool = True
 
 
 @dataclass(frozen=True)

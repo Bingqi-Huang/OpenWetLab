@@ -18,8 +18,20 @@ PROPS = {
 }
 
 POSITIONS = {
-    "rack:low": Position(label="料架·低层（Z≈367）", point="2118246861233086466", posture=0),
-    "rack:high": Position(label="料架·高层（Z≈463）", point="2120761428308422658", posture=0),
+    "rack:low": Position(
+        label="料架·低层（Z≈367）",
+        device="rack",
+        point="2118246861233086466",
+        posture=0,
+        index="1-3",
+    ),
+    "rack:high": Position(
+        label="料架·高层（Z≈463）",
+        device="rack",
+        point="2120761428308422658",
+        posture=0,
+        index="1-2",
+    ),
 }
 
 

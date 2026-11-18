@@ -5,7 +5,7 @@ import pathlib
 
 from wetlab.lab import safety
 from wetlab.lab.devices import ISLAND, KEY_PROPS, NAME_TO_CODE, POSITIONS, rack
-from wetlab.lab.devices.base import ACT, READ, skill
+from wetlab.lab.devices.base import ACT, Action, Position, READ, skill
 
 GATEWAY_OK = {"online": True, "busy_by_others": False}
 PCR_READY = {
@@ -72,6 +72,30 @@ def test_island_registry_and_skill_decorator() -> None:
 
     assert sample_skill.__skill__.name == "sample_skill"
     assert sample_skill(None, 2) == 3
+
+    assert Action(ACT).moves is False
+    pos = Position("料架 1-2", "rack", "2120761428308422658", 0, "1-2")
+    assert pos.holds_labware is True
+    assert pos.device == "rack"
+    assert pos.index == "1-2"
+    moving_pairs = {
+        (dev.spec.NAME, act_name)
+        for dev in ISLAND
+        for act_name, act in dev.spec.ACTIONS.items()
+        if act.moves
+    }
+    assert moving_pairs == {
+        ("pcr", "OpenDoor"),
+        ("pcr", "CloseDoor"),
+        ("pcr", "SetLidMotor"),
+        ("shaker", "SetClamp"),
+        ("shaker", "StartShake"),
+        ("shaker", "StartShakeTimed"),
+        ("shaker", "StopShake"),
+        ("shaker", "Home"),
+        ("turntable", "SingleLoop"),
+        ("arm", "MovMulti"),
+    }
 
 
 def test_allow_list_and_read_only_actions() -> None:

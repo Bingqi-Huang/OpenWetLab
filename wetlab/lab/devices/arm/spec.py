@@ -13,7 +13,7 @@ ACTIONS = {
     "GripperStatus": Action(READ),
     "GripperGetPosition": Action(READ),
     "CheckReachable": Action(READ),
-    "MovMulti": Action(ACT, seconds=60, result_topic="motion/response"),
+    "MovMulti": Action(ACT, seconds=60, result_topic="motion/response", moves=True),
     "Pause": Action(ACT, stop=True),
     "Continue": Action(ACT),
     "Stop": Action(ACT, stop=True),
@@ -29,7 +29,14 @@ PROPS = {
 }
 
 POSITIONS: dict[str, Position] = {}
-HOME = Position(label="机械臂原位", point="2120809646631186433", posture=0)
+HOME = Position(
+    label="机械臂原位",
+    device="arm",
+    point="2120809646631186433",
+    posture=0,
+    index="1-1",
+    holds_labware=False,
+)
 
 
 def result_ok(action: str, data: dict) -> tuple[bool, str]:

@@ -21,9 +21,9 @@ ACTIONS = {
     "ListFiles": Action(READ),
     "ReadAttribute": Action(READ),
     "ReadAttributes": Action(READ),
-    "OpenDoor": Action(ACT, seconds=5),
-    "CloseDoor": Action(ACT, seconds=5),
-    "SetLidMotor": Action(ACT, seconds=8),
+    "OpenDoor": Action(ACT, seconds=5, moves=True),
+    "CloseDoor": Action(ACT, seconds=5, moves=True),
+    "SetLidMotor": Action(ACT, seconds=8, moves=True),
     "RunFile": Action(ACT, until_done=True),
     "RunProgram": Action(ACT),
     "StartRun": Action(ACT),
@@ -47,7 +47,13 @@ PROPS = {
 }
 
 POSITIONS = {
-    "pcr": Position(label="PCR仪", point="2118260185060499457", posture=90),
+    "pcr": Position(
+        label="PCR仪",
+        device="pcr",
+        point="2118260185060499457",
+        posture=90,
+        index="1-1",
+    ),
 }
 
 

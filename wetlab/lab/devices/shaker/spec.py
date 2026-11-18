@@ -12,11 +12,11 @@ ACTIONS = {
     "GetSerialNumber": Action(READ),
     "SetTargetSpeed": Action(ACT),
     "SetDirection": Action(ACT),
-    "StartShake": Action(ACT),
-    "StartShakeTimed": Action(ACT, until_done=True),
-    "StopShake": Action(ACT, seconds=10, stop=True),
-    "Home": Action(ACT),
-    "SetClamp": Action(ACT, seconds=2),
+    "StartShake": Action(ACT, moves=True),
+    "StartShakeTimed": Action(ACT, until_done=True, moves=True),
+    "StopShake": Action(ACT, seconds=10, stop=True, moves=True),
+    "Home": Action(ACT, moves=True),
+    "SetClamp": Action(ACT, seconds=2, moves=True),
     "SetTargetTemperature": Action(ACT),
     "SetHoldTime": Action(ACT),
     "SetTemperatureControl": Action(ACT),
@@ -43,7 +43,13 @@ PROPS = {
 }
 
 POSITIONS = {
-    "shaker": Position(label="恒温振荡模组", point="2120763995201499138", posture=0),
+    "shaker": Position(
+        label="恒温振荡模组",
+        device="shaker",
+        point="2120763995201499138",
+        posture=0,
+        index="1-1",
+    ),
 }
 
 
