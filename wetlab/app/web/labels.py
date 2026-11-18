@@ -50,6 +50,7 @@ MODE_HINTS = {
 COMMAND_LABELS = {
     "new_mission": "新建任务",
     "place_labware": "放上孔板",
+    "set_labware_contents": "修改孔板内容",
     "remove_labware": "取走孔板",
     "correct_labware": "更正孔板位置",
     "submit_protocol": "提交方案",
@@ -138,11 +139,39 @@ def _hold(seconds: Any) -> str:
     return duration_text(float(seconds))
 
 
+def content_item_text(item: dict[str, Any]) -> str:
+    """Format one `labware_contents` row (`样品名（孔位 · 体积 · 备注）`)."""
+    parts: list[str] = []
+    wells = item.get("wells")
+    if wells:
+        parts.append(", ".join(str(w) for w in wells))
+    vol = item.get("volume_ul")
+    if vol is not None:
+        parts.append(f"{float(vol):g} µL")
+    note = item.get("note")
+    if note:
+        parts.append(str(note))
+    extra = f"（{' · '.join(parts)}）" if parts else ""
+    return f"{item['name']}{extra}"
+
+
+def contents_text(contents: list[dict[str, Any]]) -> str:
+    """Join all items in a plate's `contents` list into a readable Chinese summary."""
+    return "；".join(content_item_text(it) for it in contents)
+
+
 def labware_event_text(what: str, detail: dict[str, Any]) -> str:
     """One sentence for a plate's history entry (`labware_events.what` + `detail`)."""
     d = detail
     if what == "placed":
-        return f"人工放到 {position_label(d.get('position'))}"
+        pos_str = position_label(d.get("position"))
+        items = d.get("contents") or []
+        summary = contents_text(items)
+        return f"人工放到 {pos_str}（{summary}）" if summary else f"人工放到 {pos_str}"
+    if what == "contents_updated":
+        items = d.get("contents") or []
+        summary = contents_text(items)
+        return f"更新孔板内容：{summary}" if summary else "清空孔板内容"
     if what == "removed":
         return f"人工从 {position_label(d.get('from'))} 取走"
     if what == "corrected":

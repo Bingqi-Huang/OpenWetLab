@@ -57,7 +57,7 @@ def _devices(snap: dict[str, Any], now: float) -> list[dict[str, Any]]:
     out = []
     for name, info in snap["devices"].items():
         age = (now - info["updated_at"]) if info["updated_at"] is not None else None
-        health, tone = _health(name, info, age)
+        health_pair = _health(name, info, age)
         rows = [
             labels.prop_text(name, prop, info["props"][prop])
             for prop in PROPS[name]
@@ -67,8 +67,8 @@ def _devices(snap: dict[str, Any], now: float) -> list[dict[str, Any]]:
             {
                 "name": name,
                 "label": labels.device_label(name),
-                "health": health,
-                "tone": tone,
+                "health": health_pair[0],
+                "tone": health_pair[1],
                 "rows": rows,
                 "updated": labels.ago_text(age) if age is not None else "从未收到",
                 "error": info["error"],
@@ -77,12 +77,28 @@ def _devices(snap: dict[str, Any], now: float) -> list[dict[str, Any]]:
     return out
 
 
-def _tiles(snap: dict[str, Any]) -> list[dict[str, Any]]:
-    """Positions grouped by the device they belong to, with the plate sitting there."""
-    at_pos = {
-        info["position"]: {"id": lw_id, "type": info["type"]}
-        for lw_id, info in snap["labware_details"].items()
-    }
+def read_labware_contents(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    """Read `labware_contents` rows grouped by `labware_id` in row order `n`."""
+    sql = "SELECT labware_id, name, wells, volume_ul, note FROM labware_contents ORDER BY n ASC"
+    out: dict[str, list[dict[str, Any]]] = {}
+    for r in conn.execute(sql).fetchall():
+        parsed = json.loads(r["wells"]) if r["wells"] else None
+        wells = [str(w) for w in parsed] if parsed else None
+        vol = float(r["volume_ul"]) if r["volume_ul"] is not None else None
+        note = str(r["note"]) if r["note"] is not None else None
+        item = {"name": str(r["name"]), "wells": wells, "volume_ul": vol, "note": note}
+        out.setdefault(str(r["labware_id"]), []).append(item)
+    return out
+
+
+def _tiles(snap: dict[str, Any], contents: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Positions grouped by the device they belong to, with the plate and its contents."""
+    at_pos: dict[str, dict[str, Any]] = {}
+    for lw_id, info in snap["labware_details"].items():
+        items = contents.get(lw_id, [])
+        summary = labels.contents_text(items)
+        shown_type = f"{info['type']} · {summary}" if summary else str(info["type"])
+        at_pos[info["position"]] = {"id": lw_id, "type": shown_type, "contents": items}
     tiles = []
     for dev in ISLAND:
         slots = [
@@ -90,16 +106,15 @@ def _tiles(snap: dict[str, Any]) -> list[dict[str, Any]]:
             for pos, p in LABWARE_POSITIONS.items()
             if p.device == dev.spec.NAME
         ]
-        if not slots:
-            continue
-        tiles.append({"label": dev.spec.LABEL, "slots": slots})
+        if slots:
+            tiles.append({"label": dev.spec.LABEL, "slots": slots})
     return tiles
 
 
 def _active_run(conn: sqlite3.Connection) -> dict[str, Any] | None:
-    running = runs.list_protocols(conn, status="running")
-    paused = runs.list_protocols(conn, status="paused")
-    active = running + paused
+    active = runs.list_protocols(conn, status="running") + runs.list_protocols(
+        conn, status="paused"
+    )
     if not active:
         return None
     proto = active[-1]
@@ -180,24 +195,23 @@ def _last_human_command(conn: sqlite3.Connection) -> dict[str, Any] | None:
 def frozen_context(conn: sqlite3.Connection) -> dict[str, Any]:
     """Freeze row plus the protocol step it interrupted (`sent`, `unknown`, or `waiting`)."""
     fr = island.get_freeze(conn)
-    step = None
     op = records.get_operation(conn, fr["operation_id"]) if fr["operation_id"] else None
+    step = None
     if op is not None and op["protocol_id"] is not None and op["step_n"] is not None:
         step = runs.get_step(conn, op["protocol_id"], int(op["step_n"]))
     if step is None:
         for proto in reversed(runs.list_protocols(conn)):
-            if proto["status"] in ("running", "paused"):
-                proto_steps = runs.list_steps(conn, proto["id"])
-                step = next(
-                    (s for s in proto_steps if s["status"] in ("sent", "unknown", "waiting")),
-                    None,
-                )
-                if step is not None:
-                    break
-    is_transfer = bool(
-        step and step["kind"] == "skill" and step["content"].get("skill") == "transfer"
-    )
-    transfer_lw = str(step["content"]["args"]["labware_id"]) if is_transfer and step else None
+            if proto["status"] not in ("running", "paused"):
+                continue
+            active_statuses = ("sent", "unknown", "waiting")
+            step = next(
+                (s for s in runs.list_steps(conn, proto["id"]) if s["status"] in active_statuses),
+                None,
+            )
+            if step is not None:
+                break
+    skill_name = step["content"].get("skill") if (step and step["kind"] == "skill") else None
+    transfer_lw = str(step["content"]["args"]["labware_id"]) if skill_name == "transfer" else None
     return {
         "freeze": fr,
         "operation": op,
@@ -256,6 +270,11 @@ def read_island(conn: sqlite3.Connection) -> dict[str, Any]:
     """Everything the island page and the header show, from one snapshot."""
     snap = read_snapshot(conn)
     now = island_now(snap["last_timestamp"])
+    contents_by_id = read_labware_contents(conn)
+    labware = {
+        lw_id: {**info, "contents": contents_by_id.get(lw_id, [])}
+        for lw_id, info in snap["labware_details"].items()
+    }
     return {
         "mode": island.get_island_mode(conn) or configured_mode(),
         "now": now,
@@ -265,8 +284,8 @@ def read_island(conn: sqlite3.Connection) -> dict[str, Any]:
         "closed_skills": sorted(island.get_closed_skills(conn)),
         "stop_failed_devices": _stop_failed_devices(conn),
         "last_human_command": _last_human_command(conn),
-        "tiles": _tiles(snap),
-        "labware": snap["labware_details"],
+        "tiles": _tiles(snap, contents_by_id),
+        "labware": labware,
         "active": _active_run(conn),
     }
 
