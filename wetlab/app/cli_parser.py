@@ -119,4 +119,13 @@ def build_cli_parser(handlers: dict[str, Handler]) -> argparse.ArgumentParser:
     p_export = tools_sub.add_parser("export", parents=common)
     p_export.add_argument("--output", default=None)
     p_tools.set_defaults(func=handlers["tools"])
+
+    p_points = sub.add_parser("points", parents=common)
+    points_sub = p_points.add_subparsers(dest="points_action", required=True)
+    p_import = points_sub.add_parser("import", parents=common)
+    p_import.add_argument("file")
+    p_import.add_argument("-y", "--yes", action="store_true")
+    p_import.add_argument("--date", default=None)
+    p_import.add_argument("--island-dir", default=None)
+    p_points.set_defaults(func=handlers["points"])
     return parser
