@@ -108,3 +108,73 @@ def test_materials_participates_in_outer_transaction_rollback_and_skill_failed_e
         assert mat.history("LW-001") == []
     finally:
         conn.close()
+
+
+def test_place_with_contents_set_contents_find_and_events() -> None:
+    conn = open_db(":memory:")
+    clock = [200.0]
+    mat = Materials(conn, now=lambda: clock[0])
+    try:
+        with pytest.raises(Blocked, match="unknown labware"):
+            mat.set_contents("LW-999", [{"name": "X"}])
+
+        mat.place(
+            "LW-003",
+            "96孔PCR板",
+            "rack:1-2",
+            contents=[
+                {"name": "X", "wells": ["A1", "A2"], "volume_ul": 20, "note": "主样"},
+                {"name": "Buffer", "wells": []},
+            ],
+        )
+        assert mat.contents("LW-003") == [
+            {"name": "X", "wells": ["A1", "A2"], "volume_ul": 20.0, "note": "主样"},
+            {"name": "Buffer", "wells": None, "volume_ul": None, "note": None},
+        ]
+        assert mat.find("X") == ["LW-003"]
+        assert mat.find("Buffer") == ["LW-003"]
+        assert mat.find("Missing") == []
+
+        clock[0] = 210.0
+        mat.place(
+            "LW-004",
+            "96孔PCR板",
+            "rack:1-3",
+            contents=[
+                {"name": "X", "wells": ["C1"], "volume_ul": 15.0, "note": None},
+                {"name": "X", "wells": ["C2"], "volume_ul": 15.0, "note": None},
+            ],
+        )
+        assert mat.find("X") == ["LW-003", "LW-004"]
+
+        with pytest.raises(Blocked, match="name"):
+            mat.set_contents("LW-003", [{"name": "   "}])
+
+        clock[0] = 220.0
+        mat.set_contents(
+            "LW-003",
+            [{"name": "SynCom-1", "wells": None, "volume_ul": 50.0, "note": "替换后"}],
+        )
+        assert mat.contents("LW-003") == [
+            {"name": "SynCom-1", "wells": None, "volume_ul": 50.0, "note": "替换后"}
+        ]
+        assert mat.find("X") == ["LW-004"]
+        assert mat.find("SynCom-1") == ["LW-003"]
+
+        hist = mat.history("LW-003")
+        assert [(e["what"], e["by"], e["at"]) for e in hist] == [
+            ("placed", "human", 200.0),
+            ("contents_updated", "human", 220.0),
+        ]
+        assert hist[0]["detail"]["contents"][0]["name"] == "X"
+        assert hist[1]["detail"] == {
+            "contents": [
+                {"name": "SynCom-1", "wells": None, "volume_ul": 50.0, "note": "替换后"}
+            ]
+        }
+
+        clock[0] = 230.0
+        mat.remove("LW-004")
+        assert mat.find("X") == []
+    finally:
+        conn.close()

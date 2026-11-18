@@ -1,8 +1,15 @@
-"""Non-committing SQL helpers for operations, labware, and labware_events."""
+"""Non-committing SQL helpers for operations, labware, contents, and labware_events."""
 
 import json
 import sqlite3
 from typing import Any
+
+from .contents import (
+    find_labware_by_content as find_labware_by_content,
+    list_contents_by_labware as list_contents_by_labware,
+    list_labware_contents as list_labware_contents,
+    replace_labware_contents as replace_labware_contents,
+)
 
 OP_SUCCEEDED = "succeeded"
 

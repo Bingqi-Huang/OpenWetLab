@@ -1,6 +1,6 @@
-"""Labware position and experience ledger (docs/spec/04 section 5.7)."""
+"""Labware position, contents, and experience ledger (docs/spec/04 section 5.7)."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 import sqlite3
 import time
@@ -20,8 +20,27 @@ def _tx(conn: sqlite3.Connection) -> Iterator[None]:
             yield
 
 
+def _normalize_content_item(item: Mapping[str, Any]) -> dict[str, Any]:
+    raw_name = item.get("name")
+    name = raw_name.strip() if isinstance(raw_name, str) else ""
+    if not name:
+        raise Blocked("content item name must not be empty")
+    raw_wells = item.get("wells")
+    wells: list[str] | None = None
+    if raw_wells is not None:
+        cleaned = [str(w).strip() for w in raw_wells if str(w).strip()]
+        wells = cleaned or None
+    raw_vol = item.get("volume_ul")
+    volume_ul = float(raw_vol) if raw_vol is not None else None
+    if volume_ul is not None and volume_ul < 0:
+        raise Blocked("content item volume_ul must not be negative")
+    raw_note = item.get("note")
+    note = str(raw_note) if raw_note is not None else None
+    return {"name": name, "wells": wells, "volume_ul": volume_ul, "note": note}
+
+
 class Materials:
-    """Tracks labware positions and per-plate history in SQLite."""
+    """Tracks labware positions, contents, and per-plate history in SQLite."""
 
     def __init__(
         self,
@@ -41,7 +60,13 @@ class Materials:
         row = records.get_labware_at(self._conn, position)
         return row["id"] if row is not None else None
 
-    def place(self, labware_id: str, type: str, position: str) -> None:
+    def place(
+        self,
+        labware_id: str,
+        type: str,
+        position: str,
+        contents: Sequence[Mapping[str, Any]] | None = None,
+    ) -> None:
         """Register a plate placed on the island by a human; raises Blocked on conflict."""
         if position not in LABWARE_POSITIONS:
             raise Blocked(f"unknown position: {position}")
@@ -53,17 +78,58 @@ class Materials:
         occupant = records.get_labware_at(self._conn, position)
         if occupant is not None:
             raise Blocked(f"position {position} is already occupied by {occupant['id']}")
+        normalized = [_normalize_content_item(item) for item in (contents or [])]
+
+        detail: dict[str, Any] = {"type": type, "position": position}
+        if normalized:
+            detail["contents"] = normalized
 
         with _tx(self._conn):
             records.upsert_labware(self._conn, id=labware_id, type=type, position=position)
+            records.replace_labware_contents(self._conn, labware_id, normalized)
             records.insert_labware_event(
                 self._conn,
                 labware_id=labware_id,
                 at=self._now(),
                 what="placed",
                 by="human",
-                detail={"type": type, "position": position},
+                detail=detail,
             )
+
+    def set_contents(
+        self,
+        labware_id: str,
+        items: Sequence[Mapping[str, Any]],
+        *,
+        by: str = "human",
+    ) -> None:
+        """Replace all content rows on `labware_id` and record a `contents_updated` event."""
+        existing = records.get_labware(self._conn, labware_id)
+        if existing is None:
+            raise Blocked(f"unknown labware: {labware_id}")
+        normalized = [_normalize_content_item(item) for item in items]
+
+        with _tx(self._conn):
+            records.replace_labware_contents(self._conn, labware_id, normalized)
+            records.insert_labware_event(
+                self._conn,
+                labware_id=labware_id,
+                at=self._now(),
+                what="contents_updated",
+                by=by,
+                detail={"contents": normalized},
+            )
+
+    def contents(self, labware_id: str) -> list[dict[str, Any]]:
+        """Return normalized content items for `labware_id` ordered by row `n`."""
+        return records.list_labware_contents(self._conn, labware_id)
+
+    def find(self, name: str) -> list[str]:
+        """Return deduplicated on-island `labware_id` list holding sample/reagent `name`."""
+        query = name.strip()
+        if not query:
+            return []
+        return records.find_labware_by_content(self._conn, query, active_only=True)
 
     def remove(self, labware_id: str) -> None:
         """Record that a human removed `labware_id` from the island."""

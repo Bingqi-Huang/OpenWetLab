@@ -170,3 +170,58 @@ def test_labware_positions_and_events_history() -> None:
         assert events[0]["by"] == "human"
     finally:
         conn.close()
+
+
+def test_labware_contents_non_committing_crud_and_find(tmp_path: Path) -> None:
+    db_file = tmp_path / "contents.sqlite"
+    writer = open_db(db_file)
+    reader = open_db(db_file)
+    try:
+        with writer:
+            records.upsert_labware(writer, id="LW-003", type="96孔PCR板", position="rack:1-2")
+            records.upsert_labware(writer, id="LW-004", type="96孔PCR板", position="rack:1-3")
+
+        items = [
+            {"name": "SynCom-1", "wells": ["A1", "A2"], "volume_ul": 25.0, "note": "样本"},
+            {"name": "PCR master mix", "wells": None, "volume_ul": 50.0, "note": None},
+        ]
+        records.replace_labware_contents(writer, "LW-003", items)
+        assert writer.in_transaction is True
+        assert records.list_labware_contents(reader, "LW-003") == []
+        writer.commit()
+
+        assert records.list_labware_contents(reader, "LW-003") == items
+
+        with writer:
+            records.replace_labware_contents(
+                writer,
+                "LW-004",
+                [
+                    {"name": "SynCom-1", "wells": ["B1"], "volume_ul": 10.0, "note": None},
+                    {"name": "SynCom-1", "wells": ["B2"], "volume_ul": 10.0, "note": None},
+                ],
+            )
+
+        by_lw = records.list_contents_by_labware(reader)
+        assert set(by_lw.keys()) == {"LW-003", "LW-004"}
+        assert len(by_lw["LW-004"]) == 2
+        assert records.find_labware_by_content(reader, "SynCom-1") == ["LW-003", "LW-004"]
+
+        with writer:
+            records.replace_labware_contents(
+                writer,
+                "LW-003",
+                [{"name": "Water", "wells": [], "volume_ul": 100.0, "note": "空白"}],
+            )
+            records.update_labware_position(writer, "LW-004", None)
+
+        assert records.list_labware_contents(reader, "LW-003") == [
+            {"name": "Water", "wells": None, "volume_ul": 100.0, "note": "空白"}
+        ]
+        assert records.find_labware_by_content(reader, "SynCom-1", active_only=True) == []
+        assert records.find_labware_by_content(reader, "SynCom-1", active_only=False) == [
+            "LW-004"
+        ]
+    finally:
+        writer.close()
+        reader.close()
