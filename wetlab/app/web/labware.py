@@ -4,7 +4,7 @@ from typing import Any
 
 import streamlit as st
 
-from wetlab.lab.devices import POSITIONS
+from wetlab.lab.devices import LABWARE_POSITIONS
 
 from . import actions, labels
 
@@ -73,7 +73,7 @@ def _actual_pos_label(pos: str) -> str:
 def toolbar(on_island: dict[str, dict[str, Any]], known: list[str]) -> None:
     """Three actions; each list only offers choices the ledger can accept right now."""
     occupied = {info["position"] for info in on_island.values()}
-    free = [p for p in POSITIONS if p not in occupied]
+    free = [p for p in LABWARE_POSITIONS if p not in occupied]
     row = st.container(horizontal=True, gap="small")
     with row.popover("放上孔板", icon=":material/add:", key="pop_place", on_change="rerun"):
         with st.form("form_place", border=False, clear_on_submit=True):
