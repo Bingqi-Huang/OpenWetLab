@@ -27,7 +27,7 @@ def test_agents_has_no_report_writer_and_service_writes_mission_scoped_report(
     svc = create_virtual_service(db_path, runs_dir=runs_dir)
     svc.startup()
     svc.backend.world.plates["LW-OLD"] = "shaker"  # type: ignore[attr-defined]
-    svc.backend.world.plates["LW-001"] = "rack:low"  # type: ignore[attr-defined]
+    svc.backend.world.plates["LW-001"] = "rack:1-3"  # type: ignore[attr-defined]
 
     # Mission 1 (`M-OLD`): has `stop_all` and `correct_labware` on `LW-OLD`
     with svc.conn:
@@ -45,7 +45,7 @@ def test_agents_has_no_report_writer_and_service_writes_mission_scoped_report(
             at=svc.backend.now(),
             who="researcher",
             kind="place_labware",
-            payload={"labware_id": "LW-001", "type": "96_plate", "position": "rack:low"},
+            payload={"labware_id": "LW-001", "type": "96_plate", "position": "rack:1-3"},
         )
         inbox.enqueue_command(
             svc.conn,
@@ -116,7 +116,7 @@ def test_agents_has_no_report_writer_and_service_writes_mission_scoped_report(
             at=svc.backend.now(),
             who="researcher",
             kind="correct_labware",
-            payload={"labware_id": "LW-OLD", "position": "rack:high"},
+            payload={"labware_id": "LW-OLD", "position": "rack:1-2"},
         )
         inbox.enqueue_command(
             svc.conn,

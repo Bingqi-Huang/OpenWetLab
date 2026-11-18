@@ -13,15 +13,15 @@ def test_place_move_record_correct_remove_and_history() -> None:
     mat = Materials(conn, now=lambda: clock[0])
     try:
         assert mat.where("LW-001") is None
-        assert mat.at("rack:low") is None
+        assert mat.at("rack:1-3") is None
 
-        # Place LW-001 on rack:low and LW-002 on shaker
-        mat.place("LW-001", "pcr_plate_96", "rack:low")
+        # Place LW-001 on rack:1-3 and LW-002 on shaker
+        mat.place("LW-001", "pcr_plate_96", "rack:1-3")
         clock[0] = 105.0
         mat.place("LW-002", "pcr_plate_96", "shaker")
 
-        assert mat.where("LW-001") == "rack:low"
-        assert mat.at("rack:low") == "LW-001"
+        assert mat.where("LW-001") == "rack:1-3"
+        assert mat.at("rack:1-3") == "LW-001"
         assert mat.at("pcr") is None
 
         # Occupying an already-occupied position or re-placing an active plate -> Blocked
@@ -44,13 +44,13 @@ def test_place_move_record_correct_remove_and_history() -> None:
         clock[0] = 151.0
         mat.move("LW-001", "pcr", operation_id="WL-110000-1")
         assert mat.where("LW-001") == "pcr"
-        assert mat.at("rack:low") is None
+        assert mat.at("rack:1-3") is None
         assert mat.at("pcr") == "LW-001"
 
         # record_at records on occupied position and is a no-op on empty position
         clock[0] = 160.0
         mat.record_at("pcr", "pcr_program_completed", cycles=23)
-        mat.record_at("rack:low", "ignored_empty")
+        mat.record_at("rack:1-3", "ignored_empty")
 
         # correct: conflict with another plate -> Blocked; same position or new position -> recorded by human
         with pytest.raises(Blocked, match="occupied"):
@@ -58,14 +58,14 @@ def test_place_move_record_correct_remove_and_history() -> None:
         clock[0] = 170.0
         mat.correct("LW-001", "pcr")
         clock[0] = 175.0
-        mat.correct("LW-001", "rack:high")
-        assert mat.where("LW-001") == "rack:high"
+        mat.correct("LW-001", "rack:1-2")
+        assert mat.where("LW-001") == "rack:1-2"
 
         # remove: clears position and logs human removal; second remove -> Blocked; re-place works
         clock[0] = 180.0
         mat.remove("LW-001")
         assert mat.where("LW-001") is None
-        assert mat.at("rack:high") is None
+        assert mat.at("rack:1-2") is None
         with pytest.raises(Blocked, match="not on the island"):
             mat.remove("LW-001")
         with pytest.raises(Blocked, match="not on the island"):

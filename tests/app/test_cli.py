@@ -101,7 +101,7 @@ def test_cli_reject_stop_unfreeze_abort_and_labware_correct_remove(tmp_path: Pat
     assert _cli(db, runs_dir, "unfreeze", "--conclusion", "step_done") == 0
     assert _cli(db, runs_dir, "stop") == 0
     assert _cli(db, runs_dir, "abort", "--experiment-id", "E-001") == 0
-    assert _cli(db, runs_dir, "labware", "correct", "LW-001", "rack:low") == 0
+    assert _cli(db, runs_dir, "labware", "correct", "LW-001", "rack:1-3") == 0
     assert _cli(db, runs_dir, "labware", "remove", "LW-001") == 0
     assert _cli(db, runs_dir, "serve", "--mode", "virtual", "--once") == 0
     with open_db(db) as conn:

@@ -22,7 +22,7 @@ def _transfer_params(from_pt: int, to_pt: int) -> dict:
 def test_movmulti_timing_running_mode_and_plate_transfer() -> None:
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             devices={"pcr": {"DoorState": "Open", "LidMotorState": "Lifted", "PcrState": "Idle"}},
         )
     )
@@ -43,7 +43,7 @@ def test_movmulti_timing_running_mode_and_plate_transfer() -> None:
 def test_accident_arm_into_pcr_when_door_closed() -> None:
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             devices={"pcr": {"DoorState": "Closed", "LidMotorState": "Lifted", "PcrState": "Idle"}},
         )
     )
@@ -55,7 +55,7 @@ def test_accident_arm_into_pcr_when_door_closed() -> None:
 def test_accident_arm_into_pcr_when_lid_not_lifted() -> None:
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             devices={"pcr": {"DoorState": "Open", "LidMotorState": "Pressed", "PcrState": "Idle"}},
         )
     )
@@ -67,7 +67,7 @@ def test_accident_arm_into_pcr_when_lid_not_lifted() -> None:
 def test_accident_arm_into_pcr_when_program_running() -> None:
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             devices={
                 "pcr": {
                     "DoorState": "Open",
@@ -86,7 +86,7 @@ def test_accident_arm_into_pcr_when_program_running() -> None:
 def test_accident_arm_into_shaker_when_shaking() -> None:
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             devices={"shaker": {"ActualSpeed": 300, "ShakeState": 0, "ElmState": 2}},
         )
     )
@@ -98,7 +98,7 @@ def test_accident_arm_into_shaker_when_shaking() -> None:
 def test_accident_arm_into_shaker_when_clamped() -> None:
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             devices={"shaker": {"ActualSpeed": 0, "ShakeState": 1, "ElmState": 1}},
         )
     )
@@ -112,6 +112,6 @@ def test_accidents_pick_from_empty_and_place_onto_occupied() -> None:
     empty.call("TYPE_ROBOT_ARM001", "MovMulti", _transfer_params(RACK_LOW, SHAKER_POINT), 90)
     assert len(empty.world.accidents) == 1
 
-    occupied = SimBackend(Scenario(labware={"LW-001": "rack:low", "LW-002": "shaker"}))
+    occupied = SimBackend(Scenario(labware={"LW-001": "rack:1-3", "LW-002": "shaker"}))
     occupied.call("TYPE_ROBOT_ARM001", "MovMulti", _transfer_params(RACK_LOW, SHAKER_POINT), 90)
     assert len(occupied.world.accidents) == 1

@@ -8,16 +8,16 @@ from wetlab.lab.store import open_db
 
 def test_transfer_succeeds_when_ready_and_blocks_dangerous_orders():
     conn = open_db(":memory:")
-    backend = SimBackend(Scenario(labware={"LW-001": "rack:low"}))
+    backend = SimBackend(Scenario(labware={"LW-001": "rack:1-3"}))
     lab = Lab(backend, conn)
-    lab.materials.place("LW-001", "96_plate", "rack:low")
+    lab.materials.place("LW-001", "96_plate", "rack:1-3")
 
     # 1. Dangerous order: transfer into PCR without opening door -> blocked, 0 accidents.
     blocked_pcr = registry.call(lab, "transfer", labware_id="LW-001", to_position="pcr")
     assert blocked_pcr["status"] == "blocked"
     assert blocked_pcr["error"]["code"] == "INTERLOCK_BLOCKED"
     assert backend.world.accidents == []
-    assert lab.materials.where("LW-001") == "rack:low"
+    assert lab.materials.where("LW-001") == "rack:1-3"
 
     # 2. Open PCR door, then transfer succeeds and updates both truth and SQLite ledger.
     assert registry.call(lab, "pcr_open")["ok"] is True

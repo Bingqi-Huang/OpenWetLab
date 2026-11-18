@@ -76,7 +76,7 @@ def test_report_strictly_isolated_per_mission_and_removed_from_advance(tmp_path:
         _enqueue(
             svc,
             "correct_labware",
-            {"labware_id": "LW-M1", "position": "rack:low"},
+            {"labware_id": "LW-M1", "position": "rack:1-3"},
             key="corr-m1",
         )
         _enqueue(
