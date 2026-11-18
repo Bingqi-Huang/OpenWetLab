@@ -132,24 +132,46 @@ def test_protocol_versions_decisions_and_status_transitions() -> None:
             runs.decide_protocol(
                 conn, "E-1-v2", status="running", decided_by="Alice",
                 decided_at=25.0, rehearsal={"ok": True, "total_s": 40.0, "rechecked": True},
+                positions_hash="sha256-pos-v2",
             )
             runs.update_protocol_status(conn, "E-1-v2", "paused")
             runs.update_protocol_status(conn, "E-1-v2", "running")
             runs.update_protocol_status(conn, "E-1-v2", "done")
 
-        assert (v1, v2) == (1, 2)
+            v3 = runs.next_protocol_version(conn, "E-1")
+            runs.insert_protocol(
+                conn, id="E-1-v3", experiment_id="E-1", version=v3,
+                content={"name": "v3", "steps": []}, fingerprint="fp-v3",
+                status="submitted", submitted_at=30.0, positions_hash="sha256-pos-v3",
+            )
+            runs.decide_protocol(
+                conn, "E-1-v3", status="rejected", decided_by="Alice",
+                decided_at=35.0, reject_comment="无需 v3",
+            )
+
+        assert (v1, v2, v3) == (1, 2, 3)
         p1 = runs.get_protocol(conn, "E-1-v1")
         assert p1 is not None
         assert (p1["status"], p1["decided_by"], p1["reject_comment"]) == (
             "rejected", "Alice", "请把温度改成 60℃"
         )
         assert p1["rehearsal"] == {"ok": True, "total_s": 34.0}
+        assert p1["positions_hash"] is None
 
         p2 = runs.get_protocol(conn, "E-1-v2")
         assert p2 is not None
         assert (p2["status"], p2["decided_by"], p2["decided_at"]) == ("done", "Alice", 25.0)
         assert p2["rehearsal"] == {"ok": True, "total_s": 40.0, "rechecked": True}
-        assert [p["id"] for p in runs.list_protocols(conn, experiment_id="E-1")] == ["E-1-v1", "E-1-v2"]
+        assert p2["positions_hash"] == "sha256-pos-v2"
+
+        p3 = runs.get_protocol(conn, "E-1-v3")
+        assert p3 is not None
+        assert p3["positions_hash"] == "sha256-pos-v3"
+        assert [p["id"] for p in runs.list_protocols(conn, experiment_id="E-1")] == [
+            "E-1-v1",
+            "E-1-v2",
+            "E-1-v3",
+        ]
         assert [p["id"] for p in runs.list_protocols(conn, status="done")] == ["E-1-v2"]
     finally:
         conn.close()
