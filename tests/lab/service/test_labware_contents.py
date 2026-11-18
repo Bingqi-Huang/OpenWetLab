@@ -152,3 +152,90 @@ def test_handle_labware_place_and_set_contents_visible_in_get_lab_state(
             mission_commands.handle_labware(conn, missing_model, 130.0, None)
     finally:
         conn.close()
+
+
+def test_service_dispatches_set_labware_contents_and_translates_content_errors(
+    tmp_path: Path,
+) -> None:
+    """End-to-end `commands.py` dispatch for `set_labware_contents` and Chinese content errors."""
+    import json
+    from wetlab.lab.service import create_virtual_service, messages
+    from wetlab.lab.store import inbox
+
+    assert "name" in messages.format_command_error(Blocked("content item name must not be empty"))
+    assert "volume_ul" in messages.format_command_error(
+        Blocked("content item volume_ul must not be negative")
+    )
+    assert "负" in messages.format_command_error(
+        Blocked("content item volume_ul must not be negative")
+    )
+
+    svc = create_virtual_service(tmp_path / "svc.sqlite", runs_dir=tmp_path / "runs")
+    try:
+        svc.startup()
+        with svc.conn:
+            inbox.enqueue_command(
+                svc.conn,
+                key="pl-1",
+                at=1.0,
+                who="web",
+                kind="place_labware",
+                payload={
+                    "labware_id": "LW-003",
+                    "type": "96孔PCR板",
+                    "position": "rack:1-2",
+                    "contents": [{"name": "Sample-A", "wells": ["A1"], "volume_ul": 20.0}],
+                },
+            )
+            inbox.enqueue_command(
+                svc.conn,
+                key="set-1",
+                at=2.0,
+                who="web",
+                kind="set_labware_contents",
+                payload={
+                    "labware_id": "LW-003",
+                    "contents": [{"name": "Sample-X", "wells": ["B1", "B2"], "volume_ul": 35.0}],
+                },
+            )
+            inbox.enqueue_command(
+                svc.conn,
+                key="set-missing",
+                at=3.0,
+                who="web",
+                kind="set_labware_contents",
+                payload={"labware_id": "LW-999", "contents": [{"name": "Sample-Z"}]},
+            )
+            inbox.enqueue_command(
+                svc.conn,
+                key="set-bad-vol",
+                at=4.0,
+                who="web",
+                kind="set_labware_contents",
+                payload={"labware_id": "LW-003", "contents": [{"name": "X", "volume_ul": -5.0}]},
+            )
+        svc.step()
+
+        ok_row = inbox.get_command_by_key(svc.conn, "set-1")
+        assert ok_row is not None
+        assert json.loads(ok_row["outcome"]) == {"ok": True, "labware_id": "LW-003"}
+        snap = read_snapshot(svc.conn)
+        assert snap["labware"]["LW-003"]["contents"] == [
+            {"name": "Sample-X", "wells": ["B1", "B2"], "volume_ul": 35.0, "note": None}
+        ]
+
+        miss_row = inbox.get_command_by_key(svc.conn, "set-missing")
+        assert miss_row is not None
+        miss_out = json.loads(miss_row["outcome"])
+        assert miss_out["ok"] is False
+        assert "LW-999" in miss_out["error"] and "未" in miss_out["error"]
+        assert miss_out["error_raw"] == "unknown labware: LW-999"
+
+        vol_row = inbox.get_command_by_key(svc.conn, "set-bad-vol")
+        assert vol_row is not None
+        vol_out = json.loads(vol_row["outcome"])
+        assert vol_out["ok"] is False
+        assert "contents.0.volume_ul" in vol_out["error"] and "不能小于" in vol_out["error"]
+    finally:
+        svc.conn.close()
+
