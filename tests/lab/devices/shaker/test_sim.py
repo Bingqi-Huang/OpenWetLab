@@ -41,7 +41,13 @@ def test_continuous_start_shake_and_stop_shake():
     backend.call("T002001", "SetClamp", {"clamp": True}, 15)
     backend.call("T002001", "SetTargetSpeed", {"rpm": 800}, 15)
 
-    backend.call("T002001", "StartShake", {}, 15)
+    t0 = backend.now()
+    res = backend.call("T002001", "StartShake", {}, 15)
+    assert pytest.approx(backend.now() - t0, abs=0.01) == 0.07
+    assert res["shakeState"] == 4
+    assert backend.state()["T002001"]["ShakeState"] == 4
+
+    backend.sleep(6.0)
     st_running = backend.state()["T002001"]
     assert st_running["ShakeState"] == 0
     assert st_running["ActualSpeed"] == 800
@@ -52,7 +58,40 @@ def test_continuous_start_shake_and_stop_shake():
     assert st_stopped["ActualSpeed"] == 0
     assert st_stopped["ShakeState"] == 1
     assert st_stopped["ElmState"] == 2
-    assert backend.world.history["LW-001"][-1]["seconds"] == 12
+    assert backend.world.history["LW-001"][-1]["seconds"] == 16
+
+
+def test_emergency_stop_coasts_5s_to_state_2_keeps_clamp_and_disables_heater():
+    backend = SimBackend(Scenario(labware={"LW-001": "shaker"}))
+    backend.call("T002001", "SetTargetTemperature", {"celsius": 37.0}, 15)
+    backend.call("T002001", "SetTemperatureControl", {"on": True}, 15)
+    assert backend.state()["T002001"]["TempControllerState"] == 2
+
+    backend.call("T002001", "SetClamp", {"clamp": True}, 15)
+    backend.call("T002001", "SetTargetSpeed", {"rpm": 300}, 15)
+    backend.call("T002001", "StartShake", {}, 15)
+    backend.sleep(6.0)
+    assert backend.state()["T002001"]["ShakeState"] == 0
+    assert backend.state()["T002001"]["ActualSpeed"] == 300
+
+    t0 = backend.now()
+    backend.call("T002001", "EmergencyStop", {}, 15)
+    assert pytest.approx(backend.now() - t0, abs=0.01) == 0.03
+
+    st_coasting = backend.state()["T002001"]
+    assert st_coasting["TempControllerState"] == 0
+    assert st_coasting["ElmState"] == 1
+    assert st_coasting["ActualSpeed"] > 0
+
+    backend.sleep(2.0)
+    assert backend.state()["T002001"]["ActualSpeed"] > 0
+
+    backend.sleep(3.0)
+    st_halted = backend.state()["T002001"]
+    assert st_halted["ActualSpeed"] == 0
+    assert st_halted["ShakeState"] == 2
+    assert st_halted["ElmState"] == 1
+    assert st_halted["TempControllerState"] == 0
 
 
 def test_accidents_shaking_unclamped_and_releasing_while_shaking():
