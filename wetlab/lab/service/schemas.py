@@ -1,4 +1,4 @@
-"""Pydantic payload schemas for all 19 commands in the `commands` table (04 section 5.14)."""
+"""Pydantic payload schemas for all 20 commands in the `commands` table (04 section 5.14)."""
 
 from typing import Any, Literal
 
@@ -25,17 +25,57 @@ class NewMissionPayload(BaseModel):
     mode: str | None = None
 
 
+class LabwareContentItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    wells: list[str] | None = None
+    volume_ul: float | None = Field(default=None, ge=0.0)
+    note: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _non_empty_name(cls, v: str) -> str:
+        return _require_non_empty(v, "name")
+
+    @field_validator("wells")
+    @classmethod
+    def _normalize_wells(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        cleaned = [w.strip() for w in v if w.strip()]
+        return cleaned or None
+
+
 class PlaceLabwarePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     labware_id: str
     type: str = "96_plate"
     position: str
+    contents: list[LabwareContentItem] = Field(default_factory=list)
 
     @field_validator("labware_id", "type", "position")
     @classmethod
     def _non_empty(cls, v: str, info: Any) -> str:
         return _require_non_empty(v, str(info.field_name))
+
+    @field_validator("contents", mode="before")
+    @classmethod
+    def _default_contents(cls, v: Any) -> Any:
+        return [] if v is None else v
+
+
+class SetLabwareContentsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    labware_id: str
+    contents: list[LabwareContentItem]
+
+    @field_validator("labware_id")
+    @classmethod
+    def _non_empty_lw(cls, v: str) -> str:
+        return _require_non_empty(v, "labware_id")
 
 
 class RemoveLabwarePayload(BaseModel):
@@ -210,6 +250,7 @@ class AgentErrorPayload(BaseModel):
 PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "new_mission": NewMissionPayload,
     "place_labware": PlaceLabwarePayload,
+    "set_labware_contents": SetLabwareContentsPayload,
     "remove_labware": RemoveLabwarePayload,
     "correct_labware": CorrectLabwarePayload,
     "create_experiment": CreateExperimentPayload,
@@ -228,6 +269,7 @@ PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "finish_mission": FinishMissionPayload,
     "agent_error": AgentErrorPayload,
 }
+COMMAND_SCHEMAS = PAYLOAD_SCHEMAS
 
 
 def validate_command_payload(kind: str, raw_payload: Any) -> BaseModel:

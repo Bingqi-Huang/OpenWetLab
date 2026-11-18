@@ -38,7 +38,7 @@ def test_command_errors_rollback_without_freeze_and_emit_command_failed_and_agen
     invalid status enums fail cleanly without freezing, allow subsequent commands to run, and
     emit `command_failed` for Agent commands; `agent_error` emits `agent_error` event.
     """
-    assert len(schemas.PAYLOAD_SCHEMAS) == 19
+    assert len(schemas.PAYLOAD_SCHEMAS) == 20
     svc = create_virtual_service(tmp_path / "cmd_err.sqlite", runs_dir=tmp_path / "runs")
     try:
         svc.startup()
