@@ -34,6 +34,8 @@ def test_turntable_spec():
     assert spec.CODE == "STEERING_PLATFORM001"
     assert spec.STATE_PROPS == ["States", "Angles"]
     assert spec.KEY_PROPS == ["States", "Angles"]
+    moving = {name for name, act in spec.ACTIONS.items() if act.moves}
+    assert moving == {"SingleLoop"}
 
 
 def test_turntable_not_while_arm_moves():

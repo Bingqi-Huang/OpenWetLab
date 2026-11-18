@@ -2,7 +2,6 @@
 
 from ...errors import DeviceFailed
 from ..base import SimDevice
-from . import spec
 
 
 class ArmSim(SimDevice):
@@ -28,12 +27,12 @@ class ArmSim(SimDevice):
         try:
             for task in tasks:
                 point = str(task["PositionId"])
-                if point == spec.HOME.point:
-                    yield self.env.timeout(20.0)
-                    continue
                 pos = self.world.position_of_point(point)
                 if pos is None:
                     raise DeviceFailed(f"未知点位: {point}")
+                if pos == "arm:home":
+                    yield self.env.timeout(20.0)
+                    continue
                 yield self.env.timeout(20.0)
                 owner_name = self.world.owner_of_position(pos)
                 unsafe = self.world.device(owner_name).ready_for_arm_truth()

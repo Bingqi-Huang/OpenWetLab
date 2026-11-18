@@ -1,0 +1,54 @@
+{
+  "source": {
+    "file": "vendor/Position_20261118.json",
+    "sha256": "a668142fbae941b7a8b805fc573c36bc871c50aab49dea52bc7da24dd5ae4e8d"
+  },
+  "rack:1-2": {
+    "label": "料架 1-2",
+    "device": "rack",
+    "point": "2120761428308422658",
+    "posture": 0,
+    "index": "1-2",
+    "holds_labware": true
+  },
+  "rack:1-3": {
+    "label": "料架 1-3",
+    "device": "rack",
+    "point": "2118246861233086466",
+    "posture": 0,
+    "index": "1-3",
+    "holds_labware": true
+  },
+  "pcr": {
+    "label": "PCR仪",
+    "device": "pcr",
+    "point": "2118260185060499457",
+    "posture": 90,
+    "index": "1-1",
+    "holds_labware": true
+  },
+  "shaker": {
+    "label": "恒温振荡模组",
+    "device": "shaker",
+    "point": "2120763995201499138",
+    "posture": 0,
+    "index": "1-1",
+    "holds_labware": true
+  },
+  "turntable": {
+    "label": "转向台",
+    "device": "turntable",
+    "point": "2118251893923930114",
+    "posture": 0,
+    "index": "1-1",
+    "holds_labware": false
+  },
+  "arm:home": {
+    "label": "机械臂原位",
+    "device": "arm",
+    "point": "2120809646631186433",
+    "posture": 0,
+    "index": "1-1",
+    "holds_labware": false
+  }
+}

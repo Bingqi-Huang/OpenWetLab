@@ -17,7 +17,7 @@ def test_experiment_result_lists_all_protocol_versions_and_scopes_labware(tmp_pa
     conn = open_db(db_path)
     backend = SimBackend(
         Scenario(
-            labware={"LW-001": "shaker", "LW-OTHER": "rack:low"},
+            labware={"LW-001": "shaker", "LW-OTHER": "rack:1-3"},
             faults=[Fault(device="pcr", action="OpenDoor", nth=1, kind="fail", message="门卡住")],
         )
     )
@@ -39,7 +39,7 @@ def test_experiment_result_lists_all_protocol_versions_and_scopes_labware(tmp_pa
             at=backend.now(),
             who="ui",
             kind="place_labware",
-            payload={"labware_id": "LW-OTHER", "type": "96_plate", "position": "rack:low"},
+            payload={"labware_id": "LW-OTHER", "type": "96_plate", "position": "rack:1-3"},
         )
         inbox.enqueue_command(
             conn,

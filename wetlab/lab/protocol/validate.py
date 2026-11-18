@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from .. import registry
-from ..devices import BY_NAME, POSITIONS
+from ..devices import BY_NAME, LABWARE_POSITIONS
 from ..store import island, records
 from .model import Protocol, SkillStep, WaitUntilStep, coerce_protocol
 
@@ -30,7 +30,7 @@ def validate(
     problems: list[str] = []
     seen_positions: dict[str, str] = {}
     for lw_id, pos in proto.labware.items():
-        if pos not in POSITIONS:
+        if pos not in LABWARE_POSITIONS:
             problems.append(f"器皿 {lw_id} 的位置未知: {pos!r}")
         elif pos in seen_positions:
             problems.append(

@@ -187,11 +187,16 @@ def test_frozen_transfer_step_requires_labware_position_and_corrects_ledger(tmp_
     db_path = tmp_path / "transfer.sqlite"
     svc1 = create_virtual_service(db_path, runs_dir=tmp_path / "runs")
     svc1.startup()
-    _enqueue(svc1, "place_labware", {"labware_id": "LW-001", "type": "96_plate", "position": "rack:low"}, key="lw")
+    _enqueue(
+        svc1,
+        "place_labware",
+        {"labware_id": "LW-001", "type": "96_plate", "position": "rack:1-3"},
+        key="lw",
+    )
     _enqueue(svc1, "new_mission", {"mission_id": "M-20261118-023", "title": "搬运解冻", "input_text": "xfer", "mode": "virtual"}, key="m")
     xfer_proto = {
         "name": "料架搬到振荡模组",
-        "labware": {"LW-001": "rack:low"},
+        "labware": {"LW-001": "rack:1-3"},
         "steps": [{"skill": "transfer", "args": {"labware_id": "LW-001", "to_position": "shaker"}}],
     }
     _enqueue(svc1, "submit_protocol", {"mission_id": "M-20261118-023", "protocol": xfer_proto}, key="sub")
@@ -206,13 +211,14 @@ def test_frozen_transfer_step_requires_labware_position_and_corrects_ledger(tmp_
         svc2.startup()
         assert island.get_freeze(svc2.conn)["frozen"] is True
 
-        # Missing `labware_position` -> rejected, stays frozen, plate stays at `rack:low`
+        # Missing `labware_position` -> rejected, stays frozen, plate stays at `rack:1-3`
         _enqueue(svc2, "unfreeze", {"conclusion": "step_done"}, key="unf-no-pos")
         svc2.step()
         bad_cmd = inbox.get_command_by_key(svc2.conn, "unf-no-pos")
         assert bad_cmd is not None and json.loads(bad_cmd["outcome"])["ok"] is False
         assert island.get_freeze(svc2.conn)["frozen"] is True
-        assert records.get_labware(svc2.conn, "LW-001")["position"] == "rack:low"  # type: ignore[index]
+        lw_row = records.get_labware(svc2.conn, "LW-001")
+        assert lw_row is not None and lw_row["position"] == "rack:1-3"
 
         # With `labware_position="shaker"` -> ledger corrected, freeze cleared, protocol done
         _enqueue(svc2, "unfreeze", {"conclusion": "step_done", "labware_position": "shaker"}, key="unf-with-pos")

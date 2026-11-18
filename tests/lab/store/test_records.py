@@ -126,14 +126,20 @@ def test_labware_positions_and_events_history() -> None:
     conn = open_db(":memory:")
     try:
         with conn:
-            records.upsert_labware(conn, id="LW-001", type="pcr_plate_96", position="rack:low")
+            records.upsert_labware(conn, id="LW-001", type="pcr_plate_96", position="rack:1-3")
             records.insert_labware_event(
-                conn, labware_id="LW-001", at=1.0, what="placed", by="human", detail={"position": "rack:low"}
+                conn,
+                labware_id="LW-001",
+                at=1.0,
+                what="placed",
+                by="human",
+                detail={"position": "rack:1-3"},
             )
             records.upsert_labware(conn, id="LW-002", type="pcr_plate_96", position="shaker")
 
-        assert records.get_labware(conn, "LW-001") == {"id": "LW-001", "type": "pcr_plate_96", "position": "rack:low"}
-        assert records.get_labware_at(conn, "rack:low") == {"id": "LW-001", "type": "pcr_plate_96", "position": "rack:low"}
+        expected_lw = {"id": "LW-001", "type": "pcr_plate_96", "position": "rack:1-3"}
+        assert records.get_labware(conn, "LW-001") == expected_lw
+        assert records.get_labware_at(conn, "rack:1-3") == expected_lw
         assert records.get_labware_at(conn, "pcr") is None
 
         with pytest.raises(sqlite3.IntegrityError):
@@ -148,7 +154,7 @@ def test_labware_positions_and_events_history() -> None:
             records.update_labware_position(conn, "LW-001", "pcr")
             records.insert_labware_event(
                 conn, labware_id="LW-001", at=46.0, what="moved", by="device",
-                detail={"from": "rack:low", "to": "pcr"}, operation_id="WL-5000-1",
+                detail={"from": "rack:1-3", "to": "pcr"}, operation_id="WL-5000-1",
             )
             records.update_labware_position(conn, "LW-001", None)
             records.insert_labware_event(conn, labware_id="LW-001", at=100.0, what="removed", by="human")
@@ -160,7 +166,7 @@ def test_labware_positions_and_events_history() -> None:
         events = records.list_labware_events(conn, "LW-001")
         assert [e["what"] for e in events] == ["placed", "moved", "removed"]
         assert events[1]["operation_id"] == "WL-5000-1"
-        assert events[1]["detail"] == {"from": "rack:low", "to": "pcr"}
+        assert events[1]["detail"] == {"from": "rack:1-3", "to": "pcr"}
         assert events[0]["by"] == "human"
     finally:
         conn.close()

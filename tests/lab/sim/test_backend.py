@@ -81,7 +81,7 @@ def test_fault_injection_no_result():
 
 def test_two_runs_of_same_scenario_are_identical():
     def run_once() -> tuple[float, dict, dict, dict]:
-        scen = Scenario(start_time=1_800_000_000.0, labware={"LW-001": "rack:low"})
+        scen = Scenario(start_time=1_800_000_000.0, labware={"LW-001": "rack:1-3"})
         b = SimBackend(scen)
         b.call("PCR002", "OpenDoor", {}, 20)
         b.call(

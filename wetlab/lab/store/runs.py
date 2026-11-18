@@ -27,15 +27,8 @@ def _row_to_mission(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def insert_mission(
-    conn: sqlite3.Connection,
-    *,
-    id: str,
-    title: str,
-    input_text: str,
-    mode: str,
-    status: str,
-    created_at: float,
-    conclusion: str | None = None,
+    conn: sqlite3.Connection, *, id: str, title: str, input_text: str,
+    mode: str, status: str, created_at: float, conclusion: str | None = None,
 ) -> None:
     """Insert a mission row without committing."""
     conn.execute(
@@ -90,14 +83,8 @@ def next_experiment_n(conn: sqlite3.Connection, mission_id: str) -> int:
 
 
 def insert_experiment(
-    conn: sqlite3.Connection,
-    *,
-    id: str,
-    mission_id: str,
-    n: int,
-    task: dict[str, Any],
-    status: str,
-    notes: str | None = None,
+    conn: sqlite3.Connection, *, id: str, mission_id: str,
+    n: int, task: dict[str, Any], status: str, notes: str | None = None,
 ) -> None:
     """Insert an experiment row without committing."""
     conn.execute(
@@ -149,6 +136,7 @@ def _row_to_protocol(row: sqlite3.Row) -> dict[str, Any]:
         "decided_by": row["decided_by"],
         "decided_at": row["decided_at"],
         "reject_comment": row["reject_comment"],
+        "positions_hash": row["positions_hash"],
     }
 
 
@@ -176,18 +164,20 @@ def insert_protocol(
     decided_by: str | None = None,
     decided_at: float | None = None,
     reject_comment: str | None = None,
+    positions_hash: str | None = None,
 ) -> None:
     """Insert a protocol row without committing."""
-    conn.execute(
-        "INSERT INTO protocols ("
+    cols = (
         "id, experiment_id, version, content_json, fingerprint, rehearsal_json, "
-        "text_md, status, submitted_at, decided_by, decided_at, reject_comment"
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            id, experiment_id, version, json.dumps(content, ensure_ascii=False),
-            fingerprint, _dumps(rehearsal), text_md, status, submitted_at,
-            decided_by, decided_at, reject_comment,
-        ),
+        "text_md, status, submitted_at, decided_by, decided_at, reject_comment, positions_hash"
+    )
+    vals = (
+        id, experiment_id, version, json.dumps(content, ensure_ascii=False),
+        fingerprint, _dumps(rehearsal), text_md, status, submitted_at,
+        decided_by, decided_at, reject_comment, positions_hash,
+    )
+    conn.execute(
+        f"INSERT INTO protocols ({cols}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", vals
     )
 
 
@@ -219,14 +209,19 @@ def decide_protocol(
     decided_at: float,
     reject_comment: str | None = None,
     rehearsal: dict[str, Any] | None = None,
+    positions_hash: str | None = None,
 ) -> None:
     """Record approval or rejection decision fields on a protocol without committing."""
-    conn.execute(
-        "UPDATE protocols "
-        "SET status = ?, decided_by = ?, decided_at = ?, reject_comment = ?, "
-        "rehearsal_json = COALESCE(?, rehearsal_json) WHERE id = ?",
-        (status, decided_by, decided_at, reject_comment, _dumps(rehearsal), protocol_id),
+    sql = (
+        "UPDATE protocols SET status = ?, decided_by = ?, decided_at = ?, reject_comment = ?, "
+        "rehearsal_json = COALESCE(?, rehearsal_json), "
+        "positions_hash = COALESCE(?, positions_hash) WHERE id = ?"
     )
+    params = (
+        status, decided_by, decided_at, reject_comment,
+        _dumps(rehearsal), positions_hash, protocol_id,
+    )
+    conn.execute(sql, params)
 
 
 def update_protocol_status(conn: sqlite3.Connection, protocol_id: str, status: str) -> None:

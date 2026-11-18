@@ -35,8 +35,9 @@ def test_pcr_spec_props_and_positions():
         "LidTemperature",
         "HeaterLidEnabled",
     ]
-    assert spec.POSITIONS["pcr"].point == "2118260185060499457"
-    assert spec.POSITIONS["pcr"].posture == 90
+    assert not hasattr(spec, "POSITIONS")
+    moving = {name for name, act in spec.ACTIONS.items() if act.moves}
+    assert moving == {"OpenDoor", "CloseDoor", "SetLidMotor"}
 
 
 def test_heating_needs_closed_door_and_pressed_lid():

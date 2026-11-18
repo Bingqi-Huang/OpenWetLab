@@ -1,6 +1,6 @@
 """Specification for the Huayan 6-axis robot arm (TYPE_ROBOT_ARM001 on GW_001)."""
 
-from ..base import ACT, Action, Position, Prop, READ
+from ..base import ACT, Action, Prop, READ
 
 NAME = "arm"
 LABEL = "机械臂"
@@ -13,7 +13,7 @@ ACTIONS = {
     "GripperStatus": Action(READ),
     "GripperGetPosition": Action(READ),
     "CheckReachable": Action(READ),
-    "MovMulti": Action(ACT, seconds=60, result_topic="motion/response"),
+    "MovMulti": Action(ACT, seconds=60, result_topic="motion/response", moves=True),
     "Pause": Action(ACT, stop=True),
     "Continue": Action(ACT),
     "Stop": Action(ACT, stop=True),
@@ -27,9 +27,6 @@ PROPS = {
     "SafetyStatus": Prop("安全状态", values={"NORMAL": "正常"}),
     "GripperCommStatus": Prop("夹爪通讯", values={"CONNECTED": "已连接", "DISCONNECTED": "未连接"}),
 }
-
-POSITIONS: dict[str, Position] = {}
-HOME = Position(label="机械臂原位", point="2120809646631186433", posture=0)
 
 
 def result_ok(action: str, data: dict) -> tuple[bool, str]:

@@ -1,6 +1,6 @@
 """Specification for the storage rack placeholder device (T006001 on GW_001)."""
 
-from ..base import Action, Position, Prop, READ
+from ..base import Action, Prop, READ
 
 NAME = "rack"
 LABEL = "料架"
@@ -15,11 +15,6 @@ KEY_PROPS = ["rackState", "errorCode"]
 PROPS = {
     "rackState": Prop("料架状态", values={0: "正常"}),
     "errorCode": Prop("错误码", values={0: "无"}),
-}
-
-POSITIONS = {
-    "rack:low": Position(label="料架·低层（Z≈367）", point="2118246861233086466", posture=0),
-    "rack:high": Position(label="料架·高层（Z≈463）", point="2120761428308422658", posture=0),
 }
 
 

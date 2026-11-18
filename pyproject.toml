@@ -101,6 +101,7 @@ type = "layers"
 containers = ["wetlab.lab.devices"]
 exhaustive = true
 layers = [
+    "positions",
     "gateway | pcr | shaker | arm | turntable | rack",
     "base",
 ]

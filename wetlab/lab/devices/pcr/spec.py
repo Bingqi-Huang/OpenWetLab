@@ -1,6 +1,6 @@
 """Specification for the Arhat-auto 96 thermal cycler (PCR002 on GW_001)."""
 
-from ..base import ACT, Action, Position, Prop, READ
+from ..base import ACT, Action, Prop, READ
 
 NAME = "pcr"
 LABEL = "PCR仪"
@@ -21,9 +21,9 @@ ACTIONS = {
     "ListFiles": Action(READ),
     "ReadAttribute": Action(READ),
     "ReadAttributes": Action(READ),
-    "OpenDoor": Action(ACT, seconds=5),
-    "CloseDoor": Action(ACT, seconds=5),
-    "SetLidMotor": Action(ACT, seconds=8),
+    "OpenDoor": Action(ACT, seconds=5, moves=True),
+    "CloseDoor": Action(ACT, seconds=5, moves=True),
+    "SetLidMotor": Action(ACT, seconds=8, moves=True),
     "RunFile": Action(ACT, until_done=True),
     "RunProgram": Action(ACT),
     "StartRun": Action(ACT),
@@ -44,10 +44,6 @@ PROPS = {
     "HeaterLidEnabled": Prop("热盖加热", values={True: "开", False: "关"}),
     "LidTemperature": Prop("热盖温度", unit="℃"),
     "FaultText": Prop("故障"),
-}
-
-POSITIONS = {
-    "pcr": Position(label="PCR仪", point="2118260185060499457", posture=90),
 }
 
 

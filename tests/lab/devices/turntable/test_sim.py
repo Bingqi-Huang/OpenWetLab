@@ -21,7 +21,7 @@ def test_accident_turntable_rotates_while_arm_moving():
     assert len(backend.world.accidents) == 1
 
     # Also verify during live concurrent SimPy arm motion.
-    concurrent = SimBackend(Scenario(labware={"LW-001": "rack:low"}))
+    concurrent = SimBackend(Scenario(labware={"LW-001": "rack:1-3"}))
     arm_sim = concurrent.world.device("arm")
     tt_sim = concurrent.world.device("turntable")
     arm_proc = concurrent.world.env.process(

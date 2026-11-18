@@ -4,7 +4,7 @@ import json
 import sqlite3
 from typing import Any
 
-from wetlab.lab.devices import BY_NAME, ISLAND, PROPS
+from wetlab.lab.devices import BY_NAME, ISLAND, LABWARE_POSITIONS, PROPS
 from wetlab.lab.protocol import describe_step
 from wetlab.lab.safety import MAX_STATE_AGE_S
 from wetlab.lab.snapshot import read_snapshot
@@ -85,12 +85,13 @@ def _tiles(snap: dict[str, Any]) -> list[dict[str, Any]]:
     }
     tiles = []
     for dev in ISLAND:
-        if not dev.spec.POSITIONS:
-            continue
         slots = [
             {"position": pos, "label": p.label, "labware": at_pos.get(pos)}
-            for pos, p in dev.spec.POSITIONS.items()
+            for pos, p in LABWARE_POSITIONS.items()
+            if p.device == dev.spec.NAME
         ]
+        if not slots:
+            continue
         tiles.append({"label": dev.spec.LABEL, "slots": slots})
     return tiles
 

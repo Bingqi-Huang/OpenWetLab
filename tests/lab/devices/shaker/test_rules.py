@@ -26,6 +26,8 @@ def test_shaker_spec_props():
     assert spec.STATE_PROPS == ["ElmState", "ShakeState", "ActualSpeed", "ErrorCode"]
     for prop in ("BlockTemperature", "TargetTemperature", "TempControllerStateText", "TargetSpeed"):
         assert prop in spec.KEY_PROPS
+    moving = {name for name, act in spec.ACTIONS.items() if act.moves}
+    assert moving == {"SetClamp", "StartShake", "StartShakeTimed", "StopShake", "Home"}
 
 
 def test_must_clamp_before_shaking():

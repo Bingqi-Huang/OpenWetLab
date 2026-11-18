@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from ..devices import BY_NAME, CODE_TO_NAME, POSITIONS
+from ..devices import BY_NAME, CODE_TO_NAME, LABWARE_POSITIONS
 from .faults import Fault
 
 DEFAULT_EPOCH = 1_800_000_000.0
@@ -23,7 +23,7 @@ class Scenario(BaseModel):
     def _validate_labware(cls, v: dict[str, str]) -> dict[str, str]:
         occupied: set[str] = set()
         for lw_id, pos in v.items():
-            if pos != "arm" and pos not in POSITIONS:
+            if pos != "arm" and pos not in LABWARE_POSITIONS:
                 raise ValueError(f"unknown position {pos!r} for labware {lw_id!r}")
             if pos in occupied:
                 raise ValueError(f"multiple labware items placed at {pos!r}")

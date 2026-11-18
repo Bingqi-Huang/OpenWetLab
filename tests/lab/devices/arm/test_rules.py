@@ -14,11 +14,12 @@ ARM_IDLE = {
 def test_arm_spec():
     assert spec.NAME == "arm"
     assert spec.CODE == "TYPE_ROBOT_ARM001"
-    assert spec.POSITIONS == {}
-    assert spec.HOME.point == "2120809646631186433"
-    assert spec.HOME.label == "机械臂原位"
+    assert not hasattr(spec, "POSITIONS")
+    assert not hasattr(spec, "HOME")
     assert spec.ACTIONS["MovMulti"].result_topic == "motion/response"
     assert spec.ACTIONS["MovMulti"].seconds == 60
+    moving = {name for name, act in spec.ACTIONS.items() if act.moves}
+    assert moving == {"MovMulti"}
 
 
 def test_arm_must_be_idle_normal_and_gripper_connected():

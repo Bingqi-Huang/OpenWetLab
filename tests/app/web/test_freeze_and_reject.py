@@ -39,7 +39,7 @@ def test_freeze_verdict_requires_conclusion_and_transfer_plate_position(
     conn = open_db(db_file, mode="virtual")
     sim = SimBackend(
         Scenario(
-            labware={"LW-001": "rack:low"},
+            labware={"LW-001": "rack:1-3"},
             faults=[Fault(device="arm", action="MovMulti", nth=1, kind="no_result")],
         )
     )
@@ -53,7 +53,7 @@ def test_freeze_verdict_requires_conclusion_and_transfer_plate_position(
                 at=sim.now(),
                 who="web",
                 kind="place_labware",
-                payload={"labware_id": "LW-001", "type": "96孔板", "position": "rack:low"},
+                payload={"labware_id": "LW-001", "type": "96孔板", "position": "rack:1-3"},
             )
             inbox.enqueue_command(
                 conn,
@@ -66,7 +66,7 @@ def test_freeze_verdict_requires_conclusion_and_transfer_plate_position(
         svc.tick()
         proto = {
             "name": "搬运至振荡并混匀",
-            "labware": {"LW-001": "rack:low"},
+            "labware": {"LW-001": "rack:1-3"},
             "steps": [
                 {"skill": "transfer", "args": {"labware_id": "LW-001", "to_position": "shaker"}},
                 {"skill": "shake", "args": {"seconds": 5, "rpm": 300}},
@@ -197,12 +197,12 @@ def test_send_back_protocol_then_correct_and_remove_plate(
         at = AppTest.from_file(str(MAIN_PATH), default_timeout=20).run()
         assert "pcr" not in at.selectbox(key="correct_pos").options
         at.selectbox(key="correct_id").set_value("LW-001")
-        at.selectbox(key="correct_pos").set_value("rack:high")
+        at.selectbox(key="correct_pos").set_value("rack:1-2")
         at.button(key="correct_submit").click().run()
         svc.tick()
         lw_high = records.get_labware(svc.conn, "LW-001")
         assert lw_high is not None
-        assert lw_high["position"] == "rack:high"
+        assert lw_high["position"] == "rack:1-2"
         at.run()
         at.selectbox(key="remove_id").set_value("LW-001")
         at.button(key="remove_submit").click().run()
