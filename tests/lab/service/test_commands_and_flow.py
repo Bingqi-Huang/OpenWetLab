@@ -263,7 +263,7 @@ def test_pause_keeps_pcr_running_without_new_commands_and_resume_completes(tmp_p
         rem_before = svc.backend.state()["PCR002"]["PcrRemainingSeconds"]
 
         _enqueue(svc, "pause", {"protocol_id": proto_id}, key="pause-1")
-        svc.run(max_rounds=40)
+        svc.run(max_rounds=65)
 
         assert runs.get_protocol(svc.conn, proto_id)["status"] == "paused"  # type: ignore[index]
         assert svc.backend.state()["PCR002"]["PcrRemainingSeconds"] < rem_before

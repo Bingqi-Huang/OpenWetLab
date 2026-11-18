@@ -40,6 +40,8 @@ _STATIC_DOMAIN: dict[str, str] = {
     "unfreeze on a transfer step requires labware_position": (
         "当前冻结在搬运步骤，解除冻结时必须填写器皿的实际位置（labware_position）"
     ),
+    "content item name must not be empty": "板内样品名称（name）不能为空",
+    "content item volume_ul must not be negative": "板内样品体积（volume_ul）不能为负数",
 }
 
 _EXP_ALREADY_RE = re.compile(r"^experiment (\S+) is already (\S+)$")

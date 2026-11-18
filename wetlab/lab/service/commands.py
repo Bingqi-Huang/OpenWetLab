@@ -1,4 +1,4 @@
-"""Transactional command dispatcher for all 19 `commands` kinds (04 section 5.14)."""
+"""Transactional command dispatcher for all 20 `commands` kinds (04 section 5.14)."""
 
 from collections.abc import Callable
 import json
@@ -28,11 +28,18 @@ from .schemas import (
     RemoveLabwarePayload,
     ReplyPayload,
     ResumePayload,
+    SetLabwareContentsPayload,
     SubmitProtocolPayload,
     UnfreezePayload,
 )
 
 AGENT_ROLES: frozenset[str] = frozenset({"coordinator", "operator"})
+LABWARE_MODELS = (
+    PlaceLabwarePayload,
+    RemoveLabwarePayload,
+    CorrectLabwarePayload,
+    SetLabwareContentsPayload,
+)
 
 
 def _dispatch_validated(
@@ -45,7 +52,7 @@ def _dispatch_validated(
 ) -> dict[str, Any]:
     if isinstance(model, NewMissionPayload):
         return mission_commands.handle_new_mission(conn, model, now)
-    if isinstance(model, (PlaceLabwarePayload, RemoveLabwarePayload, CorrectLabwarePayload)):
+    if isinstance(model, LABWARE_MODELS):
         return mission_commands.handle_labware(conn, model, now, on_lw)
     if isinstance(model, CreateExperimentPayload):
         return mission_commands.handle_create_experiment(conn, cmd, model, now)
