@@ -26,6 +26,7 @@ class MissionReportData:
     operations: list[dict[str, Any]]
     labware_ids: list[str]
     labware_rows: dict[str, dict[str, Any] | None]
+    labware_contents: dict[str, list[dict[str, Any]]]
     labware_events: dict[str, list[dict[str, Any]]]
     intervention_commands: list[dict[str, Any]]
     alert_events: list[dict[str, Any]]
@@ -145,6 +146,19 @@ def _event_in_mission(
     return True
 
 
+def _scoped_contents(
+    conn: sqlite3.Connection,
+    lw_id: str,
+    all_evs: list[dict[str, Any]],
+    end_at: float,
+) -> list[dict[str, Any]]:
+    content_evs = [e for e in all_evs if e["what"] in ("placed", "contents_updated")]
+    if any(float(e["at"]) > end_at for e in content_evs):
+        prior = [e for e in content_evs if float(e["at"]) <= end_at]
+        return list(prior[-1]["detail"].get("contents") or []) if prior else []
+    return records.list_labware_contents(conn, lw_id)
+
+
 def collect_mission_data(
     conn: sqlite3.Connection,
     mission_id: str,
@@ -217,16 +231,19 @@ def collect_mission_data(
 
     lw_ids = _declared_labware_ids(experiments, protocols)
     lw_rows: dict[str, dict[str, Any] | None] = {}
+    lw_contents: dict[str, list[dict[str, Any]]] = {}
     lw_events: dict[str, list[dict[str, Any]]] = {}
     for lw_id in lw_ids:
         lw_rows[lw_id] = records.get_labware(conn, lw_id)
+        all_lw_evs = records.list_labware_events(conn, lw_id)
+        lw_contents[lw_id] = _scoped_contents(conn, lw_id, all_lw_evs, end_at)
         scoped: list[dict[str, Any]] = []
-        for ev in records.list_labware_events(conn, lw_id):
+        for ev in all_lw_evs:
             ev_at = float(ev["at"])
             if not (start_at <= ev_at <= end_at):
                 continue
             if prev_end_at is not None and start_at == prev_end_at and ev_at <= prev_end_at:
-                if end_at > start_at and ev["what"] != "placed":
+                if end_at > start_at and ev["what"] not in ("placed", "contents_updated"):
                     continue
             op_id = ev["operation_id"]
             if op_id is not None:
@@ -274,6 +291,7 @@ def collect_mission_data(
         operations=ops,
         labware_ids=lw_ids,
         labware_rows=lw_rows,
+        labware_contents=lw_contents,
         labware_events=lw_events,
         intervention_commands=interventions,
         alert_events=alerts,

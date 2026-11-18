@@ -22,6 +22,7 @@ from .schemas import (
     PlaceLabwarePayload,
     RemoveLabwarePayload,
     ReplyPayload,
+    SetLabwareContentsPayload,
 )
 
 
@@ -78,16 +79,26 @@ def handle_new_mission(
 
 def handle_labware(
     conn: sqlite3.Connection,
-    model: PlaceLabwarePayload | RemoveLabwarePayload | CorrectLabwarePayload,
+    model: (
+        PlaceLabwarePayload
+        | RemoveLabwarePayload
+        | CorrectLabwarePayload
+        | SetLabwareContentsPayload
+    ),
     now: float,
     on_lw: Callable[[str, str | None], None] | None,
 ) -> dict[str, Any]:
-    """Place, remove, or correct labware position in the ledger."""
+    """Place, remove, correct labware position, or replace labware contents in the ledger."""
     mat = Materials(conn, lambda: now)
     lw_id = model.labware_id
+    if isinstance(model, SetLabwareContentsPayload):
+        items = [item.model_dump() for item in model.contents]
+        mat.set_contents(lw_id, items)
+        return {"ok": True, "labware_id": lw_id}
     if isinstance(model, PlaceLabwarePayload):
         pos: str | None = model.position
-        mat.place(lw_id, model.type, model.position)
+        items = [item.model_dump() for item in model.contents]
+        mat.place(lw_id, model.type, model.position, contents=items)
     elif isinstance(model, RemoveLabwarePayload):
         pos = None
         mat.remove(lw_id)

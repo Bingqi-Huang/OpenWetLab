@@ -1,5 +1,6 @@
-"""Read-only island snapshot from SQLite (docs/spec/04 section 5.2)."""
+"""Read-only island snapshot from SQLite (docs/spec/04 section 5.2 & 16.8)."""
 
+from collections.abc import Mapping
 import sqlite3
 from typing import Any
 
@@ -28,7 +29,7 @@ def _last_timestamp(conn: sqlite3.Connection) -> float:
 
 def extract_key_state(
     device_props: dict[str, dict[str, Any]],
-    labware_positions: dict[str, str],
+    labware_positions: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Filter device properties down to `KEY_PROPS` plus on-island labware positions."""
     summary: dict[str, Any] = {
@@ -36,7 +37,10 @@ def extract_key_state(
         for name, keys in KEY_PROPS.items()
         if name in device_props
     }
-    summary["labware"] = dict(labware_positions)
+    summary["labware"] = {
+        lw_id: (val["position"] if isinstance(val, Mapping) else val)
+        for lw_id, val in labware_positions.items()
+    }
     return summary
 
 
@@ -70,6 +74,15 @@ def read_snapshot(
     )
 
     active_labware = records.list_labware(conn, active_only=True)
+    contents_by_lw = records.list_contents_by_labware(conn)
+    labware_out = {
+        item["id"]: {
+            "position": item["position"],
+            "type": item["type"],
+            "contents": contents_by_lw.get(item["id"], []),
+        }
+        for item in active_labware
+    }
     return {
         "devices": devices_out,
         "gateway": {
@@ -78,11 +91,8 @@ def read_snapshot(
             "updated_at": gw_updated_at,
             "age_s": gw_age_s,
         },
-        "labware": {item["id"]: item["position"] for item in active_labware},
-        "labware_details": {
-            item["id"]: {"type": item["type"], "position": item["position"]}
-            for item in active_labware
-        },
+        "labware": labware_out,
+        "labware_details": {lw_id: dict(info) for lw_id, info in labware_out.items()},
         "freeze": island.get_freeze(conn),
         "last_timestamp": _last_timestamp(conn),
     }

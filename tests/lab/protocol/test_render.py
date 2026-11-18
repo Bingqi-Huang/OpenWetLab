@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 import re
 
+from wetlab.lab.materials import Materials
 from wetlab.lab.protocol.model import Protocol
 from wetlab.lab.protocol.render import format_pcr_stages, render
+from wetlab.lab.store import open_db
 
 SOPS_DIR = Path(__file__).resolve().parents[3] / "sops"
 
@@ -59,3 +61,44 @@ def test_render_has_checklist_one_line_per_step_trajectories_and_verdict() -> No
     assert "## 器皿去向" in text
     assert "## 预演结论" in text
     assert "预演通过" in text
+
+
+def test_render_includes_labware_contents_when_conn_or_contents_passed() -> None:
+    proto = {
+        "name": "把样品 X 做 PCR",
+        "labware": {"LW-003": "rack:1-2"},
+        "steps": [{"skill": "pcr_open", "args": {}}],
+    }
+
+    plain = render(proto)
+    assert "- [ ] 器皿 LW-003 位于 料架 1-2（rack:1-2）" in plain
+    assert "内容：" not in plain
+
+    with_dict = render(
+        proto,
+        contents={
+            "LW-003": [
+                {"name": "X", "wells": ["A1", "A2"], "volume_ul": 25.0, "note": "主样"},
+                {"name": "PCR master mix", "wells": None, "volume_ul": 50.0, "note": None},
+            ]
+        },
+    )
+    checklist_part = with_dict.split("## 执行步骤")[0]
+    assert "LW-003" in checklist_part
+    assert "X（孔位 A1、A2，25 µL，主样）" in checklist_part
+    assert "PCR master mix（整板，50 µL）" in checklist_part
+
+    conn = open_db(":memory:")
+    try:
+        mat = Materials(conn, now=lambda: 10.0)
+        mat.place(
+            "LW-003",
+            "96孔PCR板",
+            "rack:1-2",
+            contents=[{"name": "SynCom-1", "wells": ["B1"], "volume_ul": 30.0, "note": "菌群"}],
+        )
+        with_conn = render(proto, conn=conn)
+        conn_checklist = with_conn.split("## 执行步骤")[0]
+        assert "SynCom-1（孔位 B1，30 µL，菌群）" in conn_checklist
+    finally:
+        conn.close()

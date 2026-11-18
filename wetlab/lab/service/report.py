@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 
+from ..protocol.render import format_contents_text
 from .report_scope import MissionReportData, collect_mission_data
 
 
@@ -101,16 +102,30 @@ def _render_part_one(data: MissionReportData) -> list[str]:
         lw = data.labware_rows.get(lw_id)
         lw_type = lw["type"] if lw else "未知类型"
         pos_str = f"`{lw['position']}`" if (lw and lw["position"]) else "已移出实验岛"
+        items = data.labware_contents.get(lw_id, [])
+        contents_txt = format_contents_text(items) if items else "未登记"
         lines.append(f"- **`{lw_id}`**（类型 `{lw_type}`，当前位置：{pos_str}）：")
+        lines.append(f"  - 板内内容：{contents_txt}")
         evs = data.labware_events.get(lw_id, [])
         if not evs:
             lines.append("  - （本任务期间无经历记录）")
         for ev in evs:
-            detail_json = json.dumps(ev["detail"], ensure_ascii=False)
-            detail_str = f" {detail_json}" if ev["detail"] else ""
+            detail = ev["detail"] or {}
+            detail_json = json.dumps(detail, ensure_ascii=False)
+            detail_str = f" {detail_json}" if detail else ""
             op_ref = f"（操作 `{ev['operation_id']}`）" if ev["operation_id"] else ""
             ts_str = _fmt_ts(ev["at"])
-            lines.append(f"  - [{ts_str}] 由 `{ev['by']}` 记录 `{ev['what']}`{detail_str}{op_ref}")
+            if ev["what"] == "contents_updated":
+                upd_items = detail.get("contents") or []
+                upd_txt = format_contents_text(upd_items) if upd_items else "清空内容"
+                lines.append(
+                    f"  - [{ts_str}] 由 `{ev['by']}` 修改板内内容"
+                    f"（`contents_updated`：{upd_txt}）{detail_str}"
+                )
+            else:
+                lines.append(
+                    f"  - [{ts_str}] 由 `{ev['by']}` 记录 `{ev['what']}`{detail_str}{op_ref}"
+                )
     lines.append("")
 
     lines.append("### 6. 偏差、暂停与人工干预记录")

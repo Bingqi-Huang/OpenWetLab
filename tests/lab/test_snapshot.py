@@ -49,7 +49,13 @@ def test_empty_and_populated_snapshot() -> None:
                 updated_at=53.0,
             )
             records.upsert_labware(conn, id="LW-001", type="pcr_plate_96", position="pcr")
+            records.replace_labware_contents(
+                conn,
+                "LW-001",
+                [{"name": "X", "wells": ["A1"], "volume_ul": 25.0, "note": "样品X"}],
+            )
             records.upsert_labware(conn, id="LW-002", type="pcr_plate_96", position=None)
+            records.upsert_labware(conn, id="LW-003", type="96孔PCR板", position="rack:1-2")
             records.insert_operation(
                 conn,
                 id="WL-60000-1",
@@ -74,10 +80,22 @@ def test_empty_and_populated_snapshot() -> None:
         assert snap["devices"]["pcr"]["key_props"]["PcrRemainingSeconds"] == 120
         assert snap["devices"]["pcr"]["age_s"] == 5.0
         assert snap["devices"]["shaker"]["error"] == "sensor warning"
-        assert snap["labware"] == {"LW-001": "pcr"}
-        assert snap["labware_details"] == {
-            "LW-001": {"type": "pcr_plate_96", "position": "pcr"}
+        expected_lw = {
+            "LW-001": {
+                "position": "pcr",
+                "type": "pcr_plate_96",
+                "contents": [
+                    {"name": "X", "wells": ["A1"], "volume_ul": 25.0, "note": "样品X"}
+                ],
+            },
+            "LW-003": {
+                "position": "rack:1-2",
+                "type": "96孔PCR板",
+                "contents": [],
+            },
         }
+        assert snap["labware"] == expected_lw
+        assert snap["labware_details"] == expected_lw
         assert snap["last_timestamp"] == 64.5
 
         key_state = extract_key_state(
@@ -85,6 +103,8 @@ def test_empty_and_populated_snapshot() -> None:
         )
         assert "InternalDebugCounter" not in key_state["pcr"]
         assert key_state["pcr"]["HeaterLidEnabled"] is True
-        assert key_state["labware"] == {"LW-001": "pcr"}
+        assert key_state["labware"] == {"LW-001": "pcr", "LW-003": "rack:1-2"}
+        key_state_flat = extract_key_state({}, {"LW-001": "pcr"})
+        assert key_state_flat["labware"] == {"LW-001": "pcr"}
     finally:
         conn.close()
