@@ -1,11 +1,12 @@
 """AppTest suite for #40: bench position dropdowns, contents display, and contents commands."""
 
+import ast
 from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from wetlab.app.web import MAIN_PATH
+from wetlab.app.web import MAIN_PATH, labels
 from wetlab.app.web.island_data import read_island
 from wetlab.lab.service.main import create_virtual_service
 from wetlab.lab.store import inbox, open_db, records
@@ -172,3 +173,93 @@ def test_place_labware_with_contents_table_enqueues_agreed_payload(
         }
     finally:
         conn.close()
+
+
+def test_edit_existing_labware_contents_preloads_rows_and_enqueues_set_labware_contents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#40(3): Editing a registered plate's contents emits agreed `set_labware_contents` payload."""
+    db_file = tmp_path / "edit_contents.sqlite"
+    monkeypatch.delenv("WETLAB_MODE", raising=False)
+    monkeypatch.setenv("WETLAB_DB", str(db_file))
+    conn = open_db(db_file, mode="virtual")
+    try:
+        with conn:
+            records.upsert_labware(conn, id="LW-001", type="96孔PCR板", position="pcr")
+            records.upsert_labware(conn, id="LW-002", type="96孔PCR板", position="rack:1-3")
+            conn.execute(
+                "INSERT INTO labware_contents (labware_id, n, name, wells, volume_ul, note) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("LW-001", 1, "旧样品", '["A1"]', 15.0, None),
+            )
+
+        at = AppTest.from_file(str(MAIN_PATH), default_timeout=20).run()
+        assert not at.exception
+        assert "旧样品（A1 · 15 µL）" in _html(at)
+        assert at.selectbox(key="contents_id").value == "LW-001"
+        preloaded = at.data_editor(key="contents_rows").value
+        assert list(preloaded["name"]) == ["旧样品"]
+        assert list(preloaded["wells"]) == ["A1"]
+        assert list(preloaded["volume_ul"]) == [15.0]
+
+        at.session_state["contents_rows"] = {
+            "edited_rows": {
+                0: {"name": "样品 X", "wells": "B1, B2", "volume_ul": 30.0, "note": "复测"}
+            },
+            "added_rows": [{"name": "阴性对照", "wells": "H12", "volume_ul": 30.0}],
+            "deleted_rows": [],
+        }
+        at.button(key="contents_submit").click().run()
+        assert not at.exception
+
+        cmds = inbox.list_unhandled_commands(conn)
+        assert len(cmds) == 1
+        assert cmds[0]["kind"] == "set_labware_contents"
+        assert cmds[0]["target_id"] == "LW-001"
+        assert cmds[0]["payload"] == {
+            "labware_id": "LW-001",
+            "contents": [
+                {"name": "样品 X", "wells": ["B1", "B2"], "volume_ul": 30.0, "note": "复测"},
+                {"name": "阴性对照", "wells": ["H12"], "volume_ul": 30.0, "note": None},
+            ],
+        }
+
+        # Switching to LW-002 and submitting blank rows sends whole-table clear `contents: []`
+        at.selectbox(key="contents_id").set_value("LW-002").run()
+        at.button(key="contents_submit").click().run()
+        cmds_all = inbox.list_unhandled_commands(conn)
+        assert len(cmds_all) == 2
+        assert cmds_all[1]["kind"] == "set_labware_contents"
+        assert cmds_all[1]["payload"] == {"labware_id": "LW-002", "contents": []}
+    finally:
+        conn.close()
+
+
+def test_g5_web_files_and_labels_respect_spec_conventions() -> None:
+    """04 §12 & §16.8: Owned files stay `< 300` lines, `<= 100` chars, single assignment."""
+    assert labels.COMMAND_LABELS["set_labware_contents"] == "修改孔板内容"
+    updated_txt = labels.labware_event_text(
+        "contents_updated",
+        {"contents": [{"name": "样品 X", "wells": ["A1"], "volume_ul": 20.0, "note": None}]},
+    )
+    assert updated_txt == "更新孔板内容：样品 X（A1 · 20 µL）"
+    assert labels.labware_event_text("contents_updated", {"contents": []}) == "清空孔板内容"
+
+    repo = Path(__file__).resolve().parents[3]
+    owned = [
+        repo / "wetlab/app/web/labware.py",
+        repo / "wetlab/app/web/labels.py",
+        repo / "wetlab/app/web/island_data.py",
+        Path(__file__).resolve(),
+    ]
+    for path in owned:
+        src = path.read_text(encoding="utf-8")
+        lines = src.splitlines()
+        assert len(lines) < 300, f"{path.name} has {len(lines)} lines"
+        over = [(idx + 1, len(ln)) for idx, ln in enumerate(lines) if len(ln) > 100]
+        assert not over, f"{path.name} has lines > 100 chars: {over}"
+        for node in ast.walk(ast.parse(src, filename=str(path))):
+            if isinstance(node, ast.Assign):
+                assert len(node.targets) == 1
+                assert not isinstance(node.targets[0], (ast.Tuple, ast.List))

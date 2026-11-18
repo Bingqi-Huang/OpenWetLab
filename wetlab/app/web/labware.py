@@ -1,4 +1,4 @@
-"""Registering plates put on, moved, or taken off the island (`place/correct/remove_labware`)."""
+"""Registering plates and editing plate contents on the island (04 §5.7, §8, §16.8)."""
 
 import math
 import re
@@ -9,6 +9,8 @@ import streamlit as st
 from wetlab.lab.devices import LABWARE_POSITIONS
 
 from . import actions, labels
+from .db import open_web_db
+from .island_data import read_labware_contents
 
 _REMOVED = "removed"
 _EMPTY_ROWS: list[dict[str, Any]] = [{"name": "", "wells": "", "volume_ul": None, "note": ""}]
@@ -84,13 +86,59 @@ def _parse_contents(
     return items, None
 
 
-def _contents_columns() -> dict[str, Any]:
-    return {
+def _contents_editor(rows: list[dict[str, Any]], key: str) -> None:
+    cols = {
         "name": st.column_config.TextColumn("名称"),
         "wells": st.column_config.TextColumn("孔位（留空为整板）"),
         "volume_ul": st.column_config.NumberColumn("体积 (µL)", min_value=0.0),
         "note": st.column_config.TextColumn("备注"),
     }
+    st.data_editor(rows, num_rows="dynamic", hide_index=True, column_config=cols, key=key)
+
+
+def _editor_rows(contents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not contents:
+        return [dict(r) for r in _EMPTY_ROWS]
+    return [
+        {
+            "name": str(it.get("name") or ""),
+            "wells": ", ".join(it["wells"]) if it.get("wells") else "",
+            "volume_ul": float(it["volume_ul"]) if it.get("volume_ul") is not None else None,
+            "note": str(it.get("note") or ""),
+        }
+        for it in contents
+    ]
+
+
+def _plate_contents(
+    lw_id: str | None,
+    on_island: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if lw_id is None:
+        return []
+    if lw_id in on_island:
+        return list(on_island[lw_id].get("contents") or [])
+    with open_web_db() as conn:
+        return read_labware_contents(conn).get(lw_id, [])
+
+
+def _reset_contents_editor() -> None:
+    st.session_state.pop("contents_rows", None)
+
+
+def _set_contents(base_rows: list[dict[str, Any]]) -> None:
+    lw_id = st.session_state.get("contents_id")
+    if lw_id is None:
+        actions.flash("error", "请选择要修改内容的孔板。")
+        return
+    parsed = _parse_contents(base_rows, st.session_state.get("contents_rows"))
+    if parsed[1] is not None:
+        actions.flash("error", parsed[1])
+        return
+    payload = {"labware_id": lw_id, "contents": parsed[0] or []}
+    actions.send("set_labware_contents", payload, target_id=lw_id, label=f"修改 {lw_id} 的内容")
+    st.session_state.pop("contents_rows", None)
+    _close("pop_contents")
 
 
 def _place() -> None:
@@ -156,9 +204,14 @@ def _actual_pos_label(pos: str) -> str:
 
 
 def toolbar(on_island: dict[str, dict[str, Any]], known: list[str]) -> None:
-    """Three actions; each list only offers choices the ledger can accept right now."""
+    """Four actions; each list only offers choices the ledger can accept right now."""
     occupied = {info["position"] for info in on_island.values()}
     free = [p for p in LABWARE_POSITIONS if p not in occupied]
+    fmt_plate = lambda i: (  # noqa: E731
+        f"{i}（{labels.position_label(on_island[i]['position'])}）"
+        if i in on_island
+        else f"{i}（已取走）"
+    )
     row = st.container(horizontal=True, gap="small")
     with row.popover("放上孔板", icon=":material/add:", key="pop_place", on_change="rerun"):
         with st.form("form_place", border=False, clear_on_submit=True):
@@ -173,19 +226,37 @@ def toolbar(on_island: dict[str, dict[str, Any]], known: list[str]) -> None:
                 key="place_pos",
             )
             st.caption("板内物料（可留空；多个孔位用逗号分隔，如 A1, A2）")
-            st.data_editor(
-                _EMPTY_ROWS,
-                num_rows="dynamic",
-                hide_index=True,
-                column_config=_contents_columns(),
-                key="place_contents",
-            )
+            _contents_editor(_EMPTY_ROWS, "place_contents")
             st.form_submit_button(
-                "登记放置",
+                "登记放置", type="primary", on_click=_place, key="place_submit", disabled=not free
+            )
+    with row.popover(
+        "改内容",
+        icon=":material/edit_note:",
+        key="pop_contents",
+        on_change="rerun",
+        disabled=not known,
+    ):
+        chosen_lw = st.selectbox(
+            "孔板",
+            known,
+            index=0 if known else None,
+            placeholder="选择孔板",
+            format_func=fmt_plate,
+            key="contents_id",
+            on_change=_reset_contents_editor,
+        )
+        base_rows = _editor_rows(_plate_contents(chosen_lw, on_island))
+        with st.form("form_contents", border=False):
+            st.caption("整表替换该孔板的内容（孔位留空表示整板，全部留空表示清空）")
+            _contents_editor(base_rows, "contents_rows")
+            st.form_submit_button(
+                "保存内容",
                 type="primary",
-                on_click=_place,
-                key="place_submit",
-                disabled=not free,
+                on_click=_set_contents,
+                args=(base_rows,),
+                key="contents_submit",
+                disabled=not known,
             )
     with row.popover(
         "更正位置",
@@ -205,12 +276,7 @@ def toolbar(on_island: dict[str, dict[str, Any]], known: list[str]) -> None:
                 key="correct_pos",
             )
             st.caption("账本和现场不一致时使用。只能更正到空位。")
-            st.form_submit_button(
-                "提交更正",
-                type="primary",
-                on_click=_correct,
-                key="correct_submit",
-            )
+            st.form_submit_button("提交更正", type="primary", on_click=_correct, key="correct_submit")
     with row.popover(
         "取走孔板",
         icon=":material/logout:",
@@ -224,12 +290,7 @@ def toolbar(on_island: dict[str, dict[str, Any]], known: list[str]) -> None:
                 sorted(on_island),
                 index=None,
                 placeholder="选择孔板",
-                format_func=lambda i: f"{i}（{labels.position_label(on_island[i]['position'])}）",
+                format_func=fmt_plate,
                 key="remove_id",
             )
-            st.form_submit_button(
-                "确认已取走",
-                type="primary",
-                on_click=_remove,
-                key="remove_submit",
-            )
+            st.form_submit_button("确认已取走", type="primary", on_click=_remove, key="remove_submit")
